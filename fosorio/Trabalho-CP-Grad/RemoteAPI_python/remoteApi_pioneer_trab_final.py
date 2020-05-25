@@ -22,10 +22,15 @@ except ModuleNotFoundError:
     print('or appropriately adjust the file "sim.py"')
     print('--------------------------------------------------------------')
     print('')
+import math
+import time
 
 # =============== #
 #  Global Params  #
 # =============== #
+# Select Main Behavior:
+behavior = 0
+
 showPose = False
 saveFile = False
 debug = True
@@ -100,7 +105,7 @@ class GPS(Coord):
 
     def printData(self):
         # print(self.x, self.y, self.z)
-        print("[{}] x: {:1.4f}\ty: {:1.4f}\tz: {:1.4f}".format(self.suffix, self.x, self.y, self.z))
+        print("[{}] x: {:2.4f}\ty: {:2.4f}\tz: {:2.4f}".format(self.suffix, self.x, self.y, self.z))
 
 
 class Actuator:
@@ -150,6 +155,18 @@ class Pioneer:
             else:
                 self.usensors.detect[i] = 0
 
+            # TODO:
+            # Log Ultrasonic Readings
+            # if saveFile then
+            #     if (res <= 0) or (dist == nil) then
+            #         -- fUsensors: write(tostring(dist))
+            #         fUsensors: write("nil\t")
+            #     else
+            #         fUsensors: write(string.format("%.4f\t", dist))
+            #     end
+            #     fUsensors: write("\t")
+            # end
+
     def setSpeeds(self, vLeft, vRight):
         self.leftMotor.vel = vLeft
         self.rightMotor.vel = vRight
@@ -169,12 +186,76 @@ class Pioneer:
 
         print(msg)
 
+    def forward(self, speed):
+        self.setSpeeds(speed, speed)
+
+    def rear(self, speed):
+        self.setSpeeds(-speed, -speed)
+
+    def turnLeft(self,speed):
+        self.setSpeeds(-speed, speed)
+
+    def turnRight(self, speed):
+        self.setSpeeds(speed, -speed)
+
+    def stop(self):
+        self.setSpeeds(0.0, 0.0)
+
+    def check_around_is_free(self):
+        detectValue = 0.5
+
+        for i in range(16):
+            if self.usensors.detect[i] >= 0.5:
+                return False
+
+        return True
+
+    def check_obstacle_left(self):
+        detectValue = 0.5
+        ids = [1, 2, 15, 16]
+
+        for id in ids:
+            if self.usensors.detect[id-1] >= detectValue:
+                return True
+
+        return False
+
+    def check_obstacle_front(self):
+        detectValue = 0.5
+        ids = [3, 4, 5, 6]
+
+        for id in ids:
+            if self.usensors.detect[id-1] >= detectValue:
+                return True
+
+        return False
+
+    def check_obstacle_right(self):
+        detectValue = 0.5
+        ids = [7, 8, 9, 10]
+
+        for id in ids:
+            if self.usensors.detect[id-1] >= detectValue:
+                return True
+
+        return False
+
+    def check_obstacle_rear(self):
+        detectValue = 0.5
+        ids = [11, 12, 13, 14]
+
+        for id in ids:
+            if self.usensors.detect[id-1] >= detectValue:
+                return True
+
+        return False
+
 
 class Target:
     def __init__(self):
         self.name = 'target'
-        self.pos = GPS(self.name)
-        self.pose = self.pos
+        self.position = GPS(self.name)
+        self.pose = self.position
 
 
 # =========== #
@@ -190,6 +271,116 @@ def getObjectFromSim(name):
 
     return ret, obj
 
+def calculateDistances(p1, p2):
+    posDist = math.sqrt((p1.x-p2.x)**2+(p1.y-p2.y)**2+(p1.z-p2.z)**2)
+    angDist = math.atan2(p2.y-p1.y, p2.x-p1.x)
+
+    return posDist, angDist
+
+def goto(robot, target):
+    global leftDetection
+    global rightDetection
+    global obstacleDetected
+
+    # Get Robot Pose (Position & Orientation)
+    robot.position.readData()
+    robot.orientation.readData()
+
+    # Get Target Pose (Only Position)
+    target.position.readData()
+
+    # Compute Position/Angle Distance from 'Robot' to 'Target'
+    posDist, angDist = calculateDistances(robot.position, target.position)
+    angError = angDist - robot.orientation.rz
+
+    if debug:
+        print("posDist: ", posDist)
+        print("angDist: ", angDist)
+        print("Rz: ", robot.orientation.rz)
+        print("angError: ", angError)
+
+    # AngAlignment or GoForward?
+    if abs(angError) > angErrorTolerance and robot.check_around_is_free():
+        if angError > 0:  # Positive
+            print("Status: AngAlignment, Turning Left")
+            # turnLeft(math.abs(angError))
+            robot.turnLeft(0.5)
+        else:  # Negative
+            print("Status: AngAlignment, Turning Right")
+            # turnRight(math.abs(angError))
+            robot.turnRight(0.5)
+    else:
+        # Arrived to Target?
+        if posDist > posErrorTolerance:
+            # Free or Obstacle around?
+            if robot.check_around_is_free():
+                print("Status: Free, Straight to Target")
+                # leftDetection = True
+                # rightDetection = True
+                robot.forward(1.0)
+            else:
+                # GoForward or Follow Wall?
+                print("Status: Obstacle Around!")
+
+                print("Front:", robot.check_obstacle_front())
+                print("Left: ", robot.check_obstacle_left())
+                print("Right: ", robot.check_obstacle_right())
+                print("Rear: ", robot.check_obstacle_rear())
+                print("leftDetection: ", leftDetection)
+                print("rightDetection: ", rightDetection)
+                if robot.check_obstacle_front() and robot.check_obstacle_left() and leftDetection:
+                    print("Status: Obstacle on Front&Left, Turning Right")
+
+                    if obstacleDetected == False:
+                        time.sleep(5)
+                        savedRz = robot.orientation.rz
+                        obstacleDetected = True
+                        leftDetection = False
+
+                    robot.turnRight(0.5)
+                elif robot.check_obstacle_front() and robot.check_obstacle_right() and rightDetection:
+                    print("Status: Obstacle on Front&Right, Turning Left")
+
+                    if obstacleDetected == False:
+                        time.sleep(5)
+                        savedRz = robot.orientation.rz
+                        obstacleDetected = True
+                        rightDetection = False
+
+                    robot.turnLeft(0.5)
+                elif robot.check_obstacle_front() == False and (robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
+                    if abs(robot.usensors.detect[1-1] - robot.usensors.detect[16-1]) > 0.1 or abs(robot.usensors.detect[8-1] - robot.usensors.detect[9-1]) > 0.1:
+                        turningSpeed = 0.1
+                        if robot.usensors.detect[1-1] > robot.usensors.detect[16-1]:
+                            print("Status: Aligning with Wall on Left, Turning Right")
+                            robot.turnRight(turningSpeed)
+                        elif robot.usensors.detect[1-1] < robot.usensors.detect[16-1]:
+                            print("Status: Aligning with Wall on Left, Turning Left")
+                            robot.turnLeft(turningSpeed)
+                        elif robot.usensors.detect[8-1] > robot.usensors.detect[9-1]:
+                            print("Status: Aligning with Wall on Right, Turning Left")
+                            robot.turnLeft(turningSpeed)
+                        elif robot.usensors.detect[8-1] < robot.usensors.detect[9-1]:
+                            print("Status: Aligning with Wall on Right, Turning Right")
+                            robot.turnRight(turningSpeed)
+
+                    else:
+                        print("Status: Following Wall, Straight")
+                        robot.forward(0.5)
+
+                elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
+                    robot.rear(0.5)
+
+                elif robot.check_obstacle_front() and robot.check_obstacle_left() == False and robot.check_obstacle_right() == False:
+                    robot.turnLeft(0.5)
+
+                else:
+                    print("Status: Nenhum dos casos!")
+                    robot.forward(0.1)
+                    robot.stop()
+        else:
+            robot.stop()
+
 
 def braitenberg(robot, v0):
     """Behavior: Braitenberg (Obstacle Avoidance, Wander)"""
@@ -202,7 +393,8 @@ def braitenberg(robot, v0):
         vLeft = vLeft + braitenbergL[i] * robot.usensors.detect[i]
         vRight = vRight + braitenbergR[i] * robot.usensors.detect[i]
 
-    return vLeft, vRight
+    # Update Motor Speeds
+    robot.setSpeeds(vLeft, vRight)
 
 
 # ====== #
@@ -243,13 +435,6 @@ def main():
                     sim.simx_opmode_streaming)  # Mandatory First Read
 
         # TODO:
-        # Remember: This information is NOT provided easily for Real robots!!!
-        # if showPose then
-        #     myconsole = sim.auxiliaryConsoleOpen('Global Position & Orientation', 1000, 0, {0.5, 0.9}, {1000, 250}, nil, nil)
-        #     sim.auxiliaryConsoleShow(myconsole, 1)
-        # end
-
-        # TODO:
         # Open log file
         # [t u1...u16 vLeft vRight]
         # if saveFile then
@@ -264,34 +449,47 @@ def main():
             while sim.simxGetConnectionId(clientID) != -1:  # Actuation
                 # ----- Sensors ----- #
                 robot.readUltraSensors()
-                robot.position.readData()       # Get Robot's Position
-                robot.orientation.readData()    # Get Robot's Orientation
-
-                # Get Target Position
-                target.pos.readData()
 
                 # ----- Actuators ----- #
                 # Select Main Behavior:
-                vLeft, vRight = braitenberg(robot, 2.0)
+                try:
+                    if behavior == 0:
+                        goto(robot, target)  # FIXME:
+                    elif behavior == 1:
+                        braitenberg(robot, 2.0)
+                    else:
+                        raise ValueError("[ValueError] Invalid Behavior option!")
+                except ValueError:
+                        raise SystemError
 
-                # Update Motor Speeds
-                robot.setSpeeds(vLeft, vRight)
+                # TODO:
+                # Log Motor Speeds
+                # if saveFile then
+                #     fUsensors: write(string.format("%.2f ", vLeft))
+                #     fUsensors: write(string.format("%.2f\n", vRight))
+                # end
 
                 # Debug
                 if debug:
-                    # robot.printUltraSensors()
-                    # robot.printMotorSpeeds()
-                    # robot.position.printData()
+                    robot.printUltraSensors()
+                    robot.printMotorSpeeds()
+                    robot.position.printData()
                     robot.orientation.printData()
-                    # target.pos.printData()
-                    # print()
+                    target.position.printData()
+                    print()
 
-        except KeyboardInterrupt:  # CleanUp
+        except KeyboardInterrupt:  # sysCall_cleanup()
             print("Setting 0.0 velocity to motors, before disconnecting...")
             sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0,
                                            sim.simx_opmode_streaming)
             sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0,
                                            sim.simx_opmode_streaming)
+
+            # TODO:
+            # Close log file
+            # if saveFile then
+            #     fUsensors: close()
+            # end
 
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.
         # You can guarantee this with (for example):

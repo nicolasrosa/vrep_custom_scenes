@@ -54,12 +54,8 @@ rightDetection = True
 savedRz = -1
 
 # [Robot] Variables Initialization
-v0 = 0.0
 vStep = 0.5
 maxSpeed = 2.5
-
-vLeft = v0
-vRight = v0
 
 # [Braitenberg] Variables Initialization
 braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -106,8 +102,7 @@ class Pioneer:
                         dist = self.usensors.maxDetectionDist
 
                     self.usensors.detect[i] = 1 - ((dist - self.usensors.maxDetectionDist) /
-                                                    (
-                                                            self.usensors.noDetectionDist - self.usensors.maxDetectionDist))
+                                                   (self.usensors.noDetectionDist - self.usensors.maxDetectionDist))
                 else:
                     self.usensors.detect[i] = 0
             else:
@@ -122,29 +117,34 @@ class Pioneer:
         sim.simxSetJointTargetVelocity(clientID, self.rightMotor.Handle, self.rightMotor.vel,
                                        sim.simx_opmode_streaming)
 
-class Coord():
+
+class Coord:
     def __init__(self):
         self.x = 0.0
         self.y = 0.0
         self.z = 0.0
 
+
 class GPS(Coord):
     def __init__(self, suffix):
+        super().__init__()
         self.suffix = suffix
 
     def readData(self):
-        _, self.x = sim.simxGetFloatSignal(clientID, self.suffix+"_gpsX", sim.simx_opmode_streaming)
-        _, self.y = sim.simxGetFloatSignal(clientID, self.suffix+"_gpsY", sim.simx_opmode_streaming)
-        _, self.z = sim.simxGetFloatSignal(clientID, self.suffix+"_gpsZ", sim.simx_opmode_streaming)
+        _, self.x = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsX", sim.simx_opmode_streaming)
+        _, self.y = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsY", sim.simx_opmode_streaming)
+        _, self.z = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsZ", sim.simx_opmode_streaming)
 
     def printData(self):
         # print(self.x, self.y, self.z)
         print("[{}] x: {:1.4f}\ty: {:1.4f}\tz: {:1.4f}".format(self.suffix, self.x, self.y, self.z))
 
-class Target():
+
+class Target:
     def __init__(self):
         self.pos = GPS('target')
         self.pose = self.pos
+
 
 # =========== #
 #  Functions  #
@@ -172,6 +172,7 @@ def braitenberg(robot, v0):
 
     return vLeft, vRight
 
+
 # ====== #
 #  Main  #
 # ====== #
@@ -197,15 +198,17 @@ def main():
         # Sensors Initialization (remoteApi)
         for i in range(16):
             robot.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
-            ret, robot.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, robot.usensors.sensorName[i], sim.simx_opmode_oneshot_wait)
+            ret, robot.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, robot.usensors.sensorName[i],
+                                                                          sim.simx_opmode_oneshot_wait)
 
             if ret != 0:
                 print("sensorHandle '{}' not found!".format(robot.usensors.sensorName[i]))
             else:
                 print("Linked to the '{}' objHandle!".format(robot.usensors.sensorName[i]))
-                ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(clientID,
-                                                                                                                   robot.usensors.sensorHandle[i],
-                                                                                                                   sim.simx_opmode_streaming)  # Mandatory First Read
+                ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
+                    clientID,
+                    robot.usensors.sensorHandle[i],
+                    sim.simx_opmode_streaming)  # Mandatory First Read
 
         # TODO:
         # Remember: This information is NOT provided easily for Real robots!!!
@@ -230,7 +233,7 @@ def main():
                 # ----- Sensors ----- #
                 robot.readUltraSensors()
                 robot.pos.readData()  # Get Robot's Position
-                                      # Get Robot's Orientation
+                # Get Robot's Orientation
 
                 # Get Target Position
                 target.pos.readData()
@@ -246,14 +249,15 @@ def main():
                 # Update Motors Speeds based on sensors readings
                 robot.setSpeeds(vLeft, vRight)
 
-        except KeyboardInterrupt: # CleanUp
+        except KeyboardInterrupt:  # CleanUp
             print("Setting 0.0 velocity to motors, before disconnecting...")
             sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0,
                                            sim.simx_opmode_streaming)
             sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0,
                                            sim.simx_opmode_streaming)
 
-        # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive. You can guarantee this with (for example):
+        # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.
+        # You can guarantee this with (for example):
         sim.simxGetPingTime(clientID)
 
         # Now close the connection to CoppeliaSim:
@@ -263,6 +267,7 @@ def main():
         print('Failed connecting to remote API server!')
 
     print('Done.')
+
 
 if __name__ == "__main__":
     main()

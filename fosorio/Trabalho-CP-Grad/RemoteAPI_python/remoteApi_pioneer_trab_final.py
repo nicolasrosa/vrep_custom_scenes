@@ -39,11 +39,15 @@ timeOut = 5000
 sim.simxFinish(-1)  # just in case, close all opened connections
 clientID = sim.simxStart(serverIP, serverPort, True, True, timeOut, 5)
 
-#  Open Data Tubes
+# Open Data Tubes
 # Remote API doesn't have tubes, the communication is made through signals!
 # gpsCommunicationTube_robot = sim.tubeOpen(0, 'gpsData_robot', 1)
 # gyroCommunicationTube_robot = sim.tubeOpen(0, 'gyroData_robot', 1)
 # gpsCommunicationTube_target = sim.tubeOpen(0, 'gpsData_target', 1)
+
+# [Robot] Variables Initialization
+vStep = 0.5
+maxSpeed = 2.5
 
 # [goto] Variables Initialization
 posErrorTolerance = 0.1
@@ -53,10 +57,6 @@ leftDetection = True
 rightDetection = True
 savedRz = -1
 
-# [Robot] Variables Initialization
-vStep = 0.5
-maxSpeed = 2.5
-
 # [Braitenberg] Variables Initialization
 braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -65,6 +65,44 @@ braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0
 # ========= #
 #  Classes  #
 # ========= #
+class Coord:
+    def __init__(self):
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
+
+class Angeu:
+    def __init__(self):
+        self.rx = 0.0  # Alfa
+        self.ry = 0.0  # Beta
+        self.rz = 0.0  # Gamma
+
+class Compass(Angeu):
+    def __init__(self, suffix):
+        super().__init__()
+        self.suffix = suffix
+
+    def readData(self):
+        _, self.rz = sim.simxGetFloatSignal(clientID, self.suffix + "_compassLP_Z", sim.simx_opmode_streaming)
+
+    def printData(self):
+        print("[{}] compassLP: {:1.4f}".format(self.suffix, self.rz))
+
+class GPS(Coord):
+    def __init__(self, suffix):
+        super().__init__()
+        self.suffix = suffix
+
+    def readData(self):
+        _, self.x = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsX", sim.simx_opmode_streaming)
+        _, self.y = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsY", sim.simx_opmode_streaming)
+        _, self.z = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsZ", sim.simx_opmode_streaming)
+
+    def printData(self):
+        # print(self.x, self.y, self.z)
+        print("[{}] x: {:1.4f}\ty: {:1.4f}\tz: {:1.4f}".format(self.suffix, self.x, self.y, self.z))
+
+
 class Actuator:
     def __init__(self):
         self.Handle = 0
@@ -72,23 +110,27 @@ class Actuator:
 
 
 class UltraSensors:
-    def __init__(self):
+    def __init__(self, noDetectionDist, maxDetectionDist):
         self.sensorName = [''] * 16
         self.sensorHandle = [None] * 16
 
         # Pioneer's Usensors config/status variables
-        self.noDetectionDist = 0.5
-        self.maxDetectionDist = 0.2
+        self.noDetectionDist = noDetectionDist
+        self.maxDetectionDist = maxDetectionDist
+
+        # Status
         self.detect = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 
 class Pioneer:
     def __init__(self):
+        self.name = 'robot'
         self.leftMotor = Actuator()
         self.rightMotor = Actuator()
-        self.usensors = UltraSensors()
+        self.usensors = UltraSensors(0.5, 0.2)
 
-        self.pos = GPS('robot')
+        self.position = GPS(self.name)
+        self.orientation = Compass(self.name)
         # self.pose = # TODO:
 
     def readUltraSensors(self):
@@ -117,32 +159,21 @@ class Pioneer:
         sim.simxSetJointTargetVelocity(clientID, self.rightMotor.Handle, self.rightMotor.vel,
                                        sim.simx_opmode_streaming)
 
+    def printMotorSpeeds(self):
+        print("[{}] vLeft: {:1.4f}\t0vRight: {:1.4f}".format(self.name, self.leftMotor.vel, self.rightMotor.vel))
 
-class Coord:
-    def __init__(self):
-        self.x = 0.0
-        self.y = 0.0
-        self.z = 0.0
+    def printUltraSensors(self):
+        msg = "[{}] ".format(self.name)
+        for i in range(16):
+            msg += "S[{}]={:1.2f} ".format(i+1, self.usensors.detect[i])
 
-
-class GPS(Coord):
-    def __init__(self, suffix):
-        super().__init__()
-        self.suffix = suffix
-
-    def readData(self):
-        _, self.x = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsX", sim.simx_opmode_streaming)
-        _, self.y = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsY", sim.simx_opmode_streaming)
-        _, self.z = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsZ", sim.simx_opmode_streaming)
-
-    def printData(self):
-        # print(self.x, self.y, self.z)
-        print("[{}] x: {:1.4f}\ty: {:1.4f}\tz: {:1.4f}".format(self.suffix, self.x, self.y, self.z))
+        print(msg)
 
 
 class Target:
     def __init__(self):
-        self.pos = GPS('target')
+        self.name = 'target'
+        self.pos = GPS(self.name)
         self.pose = self.pos
 
 
@@ -166,6 +197,7 @@ def braitenberg(robot, v0):
     vLeft = v0
     vRight = v0
 
+    # Update Motors Speeds based on sensors readings
     for i in range(16):
         vLeft = vLeft + braitenbergL[i] * robot.usensors.detect[i]
         vRight = vRight + braitenbergR[i] * robot.usensors.detect[i]
@@ -232,22 +264,27 @@ def main():
             while sim.simxGetConnectionId(clientID) != -1:  # Actuation
                 # ----- Sensors ----- #
                 robot.readUltraSensors()
-                robot.pos.readData()  # Get Robot's Position
-                # Get Robot's Orientation
+                robot.position.readData()       # Get Robot's Position
+                robot.orientation.readData()    # Get Robot's Orientation
 
                 # Get Target Position
                 target.pos.readData()
-
-                if debug:
-                    robot.pos.printData()
-                    target.pos.printData()
 
                 # ----- Actuators ----- #
                 # Select Main Behavior:
                 vLeft, vRight = braitenberg(robot, 2.0)
 
-                # Update Motors Speeds based on sensors readings
+                # Update Motor Speeds
                 robot.setSpeeds(vLeft, vRight)
+
+                # Debug
+                if debug:
+                    # robot.printUltraSensors()
+                    # robot.printMotorSpeeds()
+                    # robot.position.printData()
+                    robot.orientation.printData()
+                    # target.pos.printData()
+                    # print()
 
         except KeyboardInterrupt:  # CleanUp
             print("Setting 0.0 velocity to motors, before disconnecting...")

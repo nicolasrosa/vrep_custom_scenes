@@ -1,2 +1,5 @@
-.ideia
-.vscode
+.idea/
+.vscode/
+build/
+__pycache__/
+*.pyc

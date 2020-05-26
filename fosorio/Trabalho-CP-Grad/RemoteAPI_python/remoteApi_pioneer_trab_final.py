@@ -24,6 +24,8 @@ except ModuleNotFoundError:
     print('')
 import math
 import time
+import matplotlib.pyplot as plt
+import numpy as np
 
 # =============== #
 #  Global Params  #
@@ -397,99 +399,173 @@ def braitenberg(robot, v0):
     robot.setSpeeds(vLeft, vRight)
 
 
+def Planning():
+    scene_size = 25
+
+    print("Planning started!")
+    _, mapSensorHandle = getObjectFromSim('mapSensor')
+
+    # res, resolution, grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_streaming)
+    #
+    # while sim.simxGetConnectionId(clientID) != -1:
+    #     res, resolution, grid = sim.simxGetVisionSensorImage(clientID,mapSensorHandle,0,sim.simx_opmode_buffer)
+    #     if res == vrep.simx_return_ok:
+    #         res = vrep.simxSetVisionSensorImage(clientID, v1, image, 0, vrep.simx_opmode_oneshot)
+    #
+    #     print(res)
+    #     print(resolution)
+    #     print(grid)
+    #
+    #     input()
+    #
+    #
+    # plt.figure(1)
+    # plt.imshow(grid)
+    # plt.draw()
+    # plt.pause(1e-4)
+
+    if clientID != -1:
+        print('Connected to remote API server')
+        res, v0 = sim.simxGetObjectHandle(clientID, 'mapSensor', sim.simx_opmode_oneshot_wait)
+
+
+        res, resolution, image = sim.simxGetVisionSensorImage(clientID, v0, 0, sim.simx_opmode_streaming)
+        while (sim.simxGetConnectionId(clientID) != -1):
+            res, resolution, image_list = sim.simxGetVisionSensorImage(clientID, v0, 0, sim.simx_opmode_buffer)
+
+            image = np.array(image_list)
+
+            try:  # First images are empty
+                shape = resolution+[3]  # (resX, resY, 3)
+                image = (np.reshape(image, shape)+1)*255
+
+                # print(image)
+                # print(image.shape, image.dtype)
+                # print(np.min(image), np.max(image))
+
+                plt.figure(1)
+                plt.imshow(image)
+                plt.draw()
+                plt.pause(1e-4)
+
+            except ValueError:
+                pass
+
+            # print(image.shape)
+
+            # if res == vrep.simx_return_ok:
+            #     res = vrep.simxSetVisionSensorImage(clientID, v1, image, 0, vrep.simx_opmode_oneshot)
+
+
+        sim.simxFinish(clientID)
+    else:
+        print('Failed connecting to remote API server')
+    print('Program ended')
+
+
+
+
+def Navigation():
+    print('Navigation started!')
+
+
+    # --------------- #
+    #  Initialization #
+    # --------------- #
+    #  Get Objects from Simulation  #
+    robot = Pioneer()
+    target = Target()
+
+    # Motors Initialization (remoteApi)
+    _, robot.leftMotor.Handle = getObjectFromSim('Pioneer_p3dx_leftMotor')
+    _, robot.rightMotor.Handle = getObjectFromSim('Pioneer_p3dx_rightMotor')
+
+    # Sensors Initialization (remoteApi)
+    for i in range(16):
+        robot.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
+        ret, robot.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, robot.usensors.sensorName[i],
+                                                                      sim.simx_opmode_oneshot_wait)
+
+        if ret != 0:
+            print("sensorHandle '{}' not found!".format(robot.usensors.sensorName[i]))
+        else:
+            print("Linked to the '{}' objHandle!".format(robot.usensors.sensorName[i]))
+            ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
+                clientID,
+                robot.usensors.sensorHandle[i],
+                sim.simx_opmode_streaming)  # Mandatory First Read
+
+    # TODO:
+    # Open log file
+    # [t u1...u16 vLeft vRight]
+    # if saveFile then
+    #     fUsensors = io.open("pioneer_usensors.log", "w")
+    # end
+
+    # ------ #
+    #  Loop  #
+    # ------ #
+    try:
+        # While the simulation is running, do
+        while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+            # ----- Sensors ----- #
+            robot.readUltraSensors()
+
+            # ----- Actuators ----- #
+            # Select Main Behavior:
+            try:
+                if behavior == 0:
+                    goto(robot, target)  # FIXME:
+                elif behavior == 1:
+                    braitenberg(robot, 2.0)
+                else:
+                    raise ValueError("[ValueError] Invalid Behavior option!")
+            except ValueError:
+                    raise SystemError
+
+            # TODO:
+            # Log Motor Speeds
+            # if saveFile then
+            #     fUsensors: write(string.format("%.2f ", vLeft))
+            #     fUsensors: write(string.format("%.2f\n", vRight))
+            # end
+
+            # Debug
+            if debug:
+                robot.printUltraSensors()
+                robot.printMotorSpeeds()
+                robot.position.printData()
+                robot.orientation.printData()
+                target.position.printData()
+                print()
+
+    except KeyboardInterrupt:  # sysCall_cleanup()
+        print("Setting 0.0 velocity to motors, before disconnecting...")
+        sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0,
+                                       sim.simx_opmode_streaming)
+        sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0,
+                                       sim.simx_opmode_streaming)
+
+        # TODO:
+        # Close log file
+        # if saveFile then
+        #     fUsensors: close()
+        # end
+
+
+
+
 # ====== #
 #  Main  #
 # ====== #
-def main():
-    print('Program started')
-
+if __name__ == "__main__":
     if clientID != -1:
         # Now send some data to CoppeliaSim in a non-blocking fashion:
         print('Connected to remote API server!')
         sim.simxAddStatusbarMessage(clientID, 'Connected to remote API client!', sim.simx_opmode_oneshot)
 
-        # --------------- #
-        #  Initialization #
-        # --------------- #
-        #  Get Objects from Simulation  #
-        robot = Pioneer()
-        target = Target()
-
-        # Motors Initialization (remoteApi)
-        _, robot.leftMotor.Handle = getObjectFromSim('Pioneer_p3dx_leftMotor')
-        _, robot.rightMotor.Handle = getObjectFromSim('Pioneer_p3dx_rightMotor')
-
-        # Sensors Initialization (remoteApi)
-        for i in range(16):
-            robot.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
-            ret, robot.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, robot.usensors.sensorName[i],
-                                                                          sim.simx_opmode_oneshot_wait)
-
-            if ret != 0:
-                print("sensorHandle '{}' not found!".format(robot.usensors.sensorName[i]))
-            else:
-                print("Linked to the '{}' objHandle!".format(robot.usensors.sensorName[i]))
-                ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
-                    clientID,
-                    robot.usensors.sensorHandle[i],
-                    sim.simx_opmode_streaming)  # Mandatory First Read
-
-        # TODO:
-        # Open log file
-        # [t u1...u16 vLeft vRight]
-        # if saveFile then
-        #     fUsensors = io.open("pioneer_usensors.log", "w")
-        # end
-
-        # ------ #
-        #  Loop  #
-        # ------ #
-        try:
-            # While the simulation is running, do
-            while sim.simxGetConnectionId(clientID) != -1:  # Actuation
-                # ----- Sensors ----- #
-                robot.readUltraSensors()
-
-                # ----- Actuators ----- #
-                # Select Main Behavior:
-                try:
-                    if behavior == 0:
-                        goto(robot, target)  # FIXME:
-                    elif behavior == 1:
-                        braitenberg(robot, 2.0)
-                    else:
-                        raise ValueError("[ValueError] Invalid Behavior option!")
-                except ValueError:
-                        raise SystemError
-
-                # TODO:
-                # Log Motor Speeds
-                # if saveFile then
-                #     fUsensors: write(string.format("%.2f ", vLeft))
-                #     fUsensors: write(string.format("%.2f\n", vRight))
-                # end
-
-                # Debug
-                if debug:
-                    robot.printUltraSensors()
-                    robot.printMotorSpeeds()
-                    robot.position.printData()
-                    robot.orientation.printData()
-                    target.position.printData()
-                    print()
-
-        except KeyboardInterrupt:  # sysCall_cleanup()
-            print("Setting 0.0 velocity to motors, before disconnecting...")
-            sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0,
-                                           sim.simx_opmode_streaming)
-            sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0,
-                                           sim.simx_opmode_streaming)
-
-            # TODO:
-            # Close log file
-            # if saveFile then
-            #     fUsensors: close()
-            # end
+        Planning()
+        # Navigation()
 
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.
         # You can guarantee this with (for example):
@@ -502,7 +578,3 @@ def main():
         print('Failed connecting to remote API server!')
 
     print('Done.')
-
-
-if __name__ == "__main__":
-    main()

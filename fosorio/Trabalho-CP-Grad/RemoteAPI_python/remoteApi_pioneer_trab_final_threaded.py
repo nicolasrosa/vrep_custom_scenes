@@ -515,6 +515,8 @@ def Planning(thread_name, robot, target):
             image_grid = (np.reshape(image_grid, image_grid_resolution+[3])+1)*255  # (resX, resY, 3)
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
+            print("[{}] aki".format(thread_name))
+
             # Plot
             plt.figure(1)
             plt.imshow(image_grid)
@@ -542,15 +544,19 @@ def Planning(thread_name, robot, target):
             # desiredPos = Coord(0.0, 0.0, 0.0)
             # goto(desiredPos)
 
-            debug = False
-            if debug:
-                robot.position.printData()
-                desiredPos.print()
-                print()
+            # debug = False
+            # if debug:
+            #     robot.position.printData()
+            #     desiredPos.print()
+            #     print()
 
 
         except ValueError:
             pass
+
+        except KeyboardInterrupt:
+            print("Setting 0.0 velocity to motors, before disconnecting...")
+            robot.stop()
 
         # print(image_grid.shape)
 
@@ -558,7 +564,7 @@ def Planning(thread_name, robot, target):
         #     res = vrep.simxSetVisionSensorImage(clientID, v1, image_grid, 0, vrep.simx_opmode_oneshot)
 
 
-def Navigation2(thread_name, robot, target):
+def Navigation(thread_name, robot, target):
     print("[{}] Navigation started!".format(thread_name))
     print(sim.simxGetConnectionId(clientID))
 
@@ -576,43 +582,8 @@ def Navigation2(thread_name, robot, target):
     # ------ #
     #  Loop  #
     # ------ #
+    # While the simulation is running, do
     try:
-        # While the simulation is running, do
-        while sim.simxGetConnectionId(clientID) != -1:  # Actuation
-            # ----- Sensors ----- #
-            robot.readUltraSensors()
-
-            
-    except KeyboardInterrupt:  # sysCall_cleanup()
-        print("Setting 0.0 velocity to motors, before disconnecting...")
-        sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0, sim.simx_opmode_streaming)
-        sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0, sim.simx_opmode_streaming)
-
-        # TODO:
-        # Close log file
-        # if saveFile then
-        #     fUsensors: close()
-        # end
-
-def Navigation(thread_name, robot, target):
-    print('[{}] Navigation started!'.format(thread_name))
-
-    # --------------- #
-    #  Initialization #
-    # --------------- #
-
-    # TODO:
-    # Open log file
-    # [t u1...u16 vLeft vRight]
-    # if saveFile then
-    #     fUsensors = io.open("pioneer_usensors.log", "w")
-    # end
-
-    # ------ #
-    #  Loop  #
-    # ------ #
-    try:
-        # While the simulation is running, do
         while sim.simxGetConnectionId(clientID) != -1:  # Actuation
             # ----- Sensors ----- #
             robot.readUltraSensors()
@@ -627,7 +598,7 @@ def Navigation(thread_name, robot, target):
                 else:
                     raise ValueError("[ValueError] Invalid Behavior option!")
             except ValueError:
-                    raise SystemError
+                raise SystemError
 
             # TODO:
             # Log Motor Speeds
@@ -636,7 +607,6 @@ def Navigation(thread_name, robot, target):
             #     fUsensors: write(string.format("%.2f\n", vRight))
             # end
 
-            # Debug
             if debug:
                 robot.printUltraSensors()
                 robot.printMotorSpeeds()
@@ -644,21 +614,12 @@ def Navigation(thread_name, robot, target):
                 robot.orientation.printData()
                 target.position.printData()
                 print()
-
-    except KeyboardInterrupt:  # sysCall_cleanup()
+    except KeyboardInterrupt:
         print("Setting 0.0 velocity to motors, before disconnecting...")
-        sim.simxSetJointTargetVelocity(clientID, robot.leftMotor.Handle, 0.0,
-                                       sim.simx_opmode_streaming)
-        sim.simxSetJointTargetVelocity(clientID, robot.rightMotor.Handle, 0.0,
-                                       sim.simx_opmode_streaming)
-
-        # TODO:
-        # Close log file
-        # if saveFile then
-        #     fUsensors: close()
-        # end
+        robot.stop()
 
 
+import signal
 
 
 # ====== #
@@ -676,17 +637,33 @@ if __name__ == "__main__":
         target = Target()
 
         # ----- Tasks ----- #
-        # Planning(robot, target)
-        # Navigation(robot, target)
+        # Planning("", robot, target)
+        # Navigation("", robot, target)
 
-        thread1 = Thread(target=Planning, args=("Thread-1", robot, target))
-        thread2 = Thread(target=Navigation2, args=("Thread-2", robot, target))
+        try:
+            # thread1 = Thread(target=Planning, args=("Thread-1", robot, target))
+            thread2 = Thread(target=Navigation, args=("Thread-2", robot, target))
 
-        thread1.start()
-        # thread2.start()
+            # thread1.start()
+            thread2.start()
 
-        thread1.join()
-        # thread2.join()
+            # Thread.join() function not only blocks until the thread finishes, but it also ignores the KeyboardInterrupt signal
+            # while thread1.is_alive():
+            #     thread1.join()
+
+            # while thread2.is_alive():
+            #     thread2.join()
+
+
+        except (KeyboardInterrupt):  # sysCall_cleanup()
+            print("Setting 0.0 velocity to motors, before disconnecting...")
+            robot.stop()
+
+            # TODO:
+            # Close log file
+            # if saveFile then
+            #     fUsensors: close()
+            # end
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

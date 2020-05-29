@@ -482,10 +482,7 @@ def coord_world2px(x, y):
 
     return (u, v)
 
-def Planning(thread_name, robot, target):
-    print("[{}] Planning started!".format(thread_name))
-    print(sim.simxGetConnectionId(clientID))
-
+def Planning(thread_name, robot, target, mapSensorHandle):
     # from grid import GridWorld
     # from d_star_lite.grid import GridWorld
     # from d_star_lite import initDStarLite
@@ -504,10 +501,7 @@ def Planning(thread_name, robot, target):
     # queue = []
     # graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
 
-    _, mapSensorHandle = getObjectFromSim('mapSensor') # TODO: move outside of planning
-
-    res, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_streaming)
-    while sim.simxGetConnectionId(clientID) != -1:
+    while sim.simxGetConnectionId(clientID) != -1:  # Actuation
         res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_buffer)
 
         try:  # First images are empty
@@ -554,7 +548,7 @@ def Planning(thread_name, robot, target):
         except ValueError:
             pass
 
-        except KeyboardInterrupt:
+        except KeyboardInterrupt: # FIXME: Doesn't work
             print("Setting 0.0 velocity to motors, before disconnecting...")
             robot.stop()
 
@@ -565,9 +559,6 @@ def Planning(thread_name, robot, target):
 
 
 def Navigation(thread_name, robot, target):
-    print("[{}] Navigation started!".format(thread_name))
-    print(sim.simxGetConnectionId(clientID))
-
     # --------------- #
     #  Initialization #
     # --------------- #
@@ -584,7 +575,7 @@ def Navigation(thread_name, robot, target):
     # ------ #
     # While the simulation is running, do
     try:
-        while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+        while sim.simxGetConnectionId(clientID) != -1:  # sysCall_actuation()
             # ----- Sensors ----- #
             robot.readUltraSensors()
 
@@ -614,12 +605,16 @@ def Navigation(thread_name, robot, target):
                 robot.orientation.printData()
                 target.position.printData()
                 print()
-    except KeyboardInterrupt:
+
+    except KeyboardInterrupt: # sysCall_cleanup() # FIXME: Doesn't work
         print("Setting 0.0 velocity to motors, before disconnecting...")
         robot.stop()
 
-
-import signal
+        # TODO:
+        # Close log file
+        # if saveFile then
+        #     fUsensors: close()
+        # end
 
 
 # ====== #
@@ -632,38 +627,38 @@ if __name__ == "__main__":
         sim.simxAddStatusbarMessage(clientID, 'Connected to remote API client!', sim.simx_opmode_oneshot)
 
         # ----- Initialization ----- #
-        #  Get Objects from Simulation  #
+        #  Get Objects from Simulation  # sysCall_init()
         robot = Pioneer()
         target = Target()
+
+        _, mapSensorHandle = getObjectFromSim('mapSensor')  # TODO: move outside of planning
+
+        res, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
+                                                                              sim.simx_opmode_streaming)
 
         # ----- Tasks ----- #
         # Planning("", robot, target)
         # Navigation("", robot, target)
 
+        thread1 = Thread(target=Planning, args=("Thread-1", robot, target, mapSensorHandle))
+        thread2 = Thread(target=Navigation, args=("Thread-2", robot, target))
+
+        thread1.start()
+        print('[Thread-1] Planning started!')
+        thread2.start()
+        print('[Thread-2] Navigation started!')
+
         try:
-            # thread1 = Thread(target=Planning, args=("Thread-1", robot, target))
-            thread2 = Thread(target=Navigation, args=("Thread-2", robot, target))
-
-            # thread1.start()
-            thread2.start()
-
-            # Thread.join() function not only blocks until the thread finishes, but it also ignores the KeyboardInterrupt signal
-            # while thread1.is_alive():
-            #     thread1.join()
-
-            # while thread2.is_alive():
-            #     thread2.join()
+            while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+                thread1.join()
+                thread2.join()
 
 
-        except (KeyboardInterrupt):  # sysCall_cleanup()
+        except (KeyboardInterrupt):  # FIXME: Doesn't work
             print("Setting 0.0 velocity to motors, before disconnecting...")
             robot.stop()
 
-            # TODO:
-            # Close log file
-            # if saveFile then
-            #     fUsensors: close()
-            # end
+
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

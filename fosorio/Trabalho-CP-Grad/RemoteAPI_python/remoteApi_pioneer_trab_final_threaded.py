@@ -197,17 +197,6 @@ class Pioneer:
             else:
                 self.usensors.detect[i] = 0
 
-            # TODO:
-            # Log Ultrasonic Readings
-            # if saveFile then
-            #     if (res <= 0) or (dist == nil) then
-            #         -- fUsensors: write(tostring(dist))
-            #         fUsensors: write("nil\t")
-            #     else
-            #         fUsensors: write(string.format("%.4f\t", dist))
-            #     end
-            #     fUsensors: write("\t")
-            # end
 
     def setSpeeds(self, vLeft, vRight):
         self.leftMotor.vel = vLeft
@@ -219,7 +208,7 @@ class Pioneer:
                                        sim.simx_opmode_streaming)
 
     def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\t0vRight: {:1.4f}".format(self.name, self.leftMotor.vel, self.rightMotor.vel))
+        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format(self.name, self.leftMotor.vel, self.rightMotor.vel))
 
     def printUltraSensors(self):
         msg = "[{}] ".format(self.name)
@@ -325,13 +314,6 @@ def goto_old(robot, target):
     global leftDetection
     global rightDetection
     global obstacleDetected
-
-    # Get Robot Pose (Position & Orientation)
-    robot.position.readData()
-    robot.orientation.readData()
-
-    # Get Target Pose (Only Position)
-    target.position.readData()
 
     # Compute Position/Angle Distance from 'Robot' to 'Target'
     posDist, angDist = calculateDistances(robot.position, target.position)
@@ -494,6 +476,24 @@ def coord_world2px(x, y):
 
     return u, v
 
+# ========= #
+#  Threads  #
+# ========= #
+def RobotStatus(thread_name, robot):
+    # While the simulation is running, do
+    while sim.simxGetConnectionId(clientID) != -1:  # sysCall_sensing()
+        robot.readUltraSensors()
+
+        # Get Robot Pose (Position & Orientation)
+        robot.position.readData()
+        robot.orientation.readData()
+
+def TargetStatus(thread_name, target):
+    # While the simulation is running, do
+    while sim.simxGetConnectionId(clientID) != -1:  # sysCall_sensing()
+        # Get Target Pose (Only Position)
+        target.position.readData()
+
 
 def Planning(thread_name, robot, target, mapSensorHandle):
     # from grid import GridWorld
@@ -514,7 +514,11 @@ def Planning(thread_name, robot, target, mapSensorHandle):
     # queue = []
     # graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
 
-    while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+    # ------ #
+    #  Loop  #
+    # ------ #
+    # While the simulation is running, do
+    while sim.simxGetConnectionId(clientID) != -1:
         res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
                                                                                    sim.simx_opmode_buffer)
 
@@ -571,27 +575,9 @@ def Planning(thread_name, robot, target, mapSensorHandle):
 
 
 def Navigation(thread_name, robot, target):
-    # --------------- #
-    #  Initialization #
-    # --------------- #
-
-    # TODO:
-    # Open log file
-    # [t u1...u16 vLeft vRight]
-    # if saveFile then
-    #     fUsensors = io.open("pioneer_usensors.log", "w")
-    # end
-
-    # ------ #
-    #  Loop  #
-    # ------ #
-    # While the simulation is running, do
     try:
+        # While the simulation is running, do
         while sim.simxGetConnectionId(clientID) != -1:  # sysCall_actuation()
-            # ----- Sensors ----- #
-            robot.readUltraSensors()
-
-            # ----- Actuators ----- #
             # Select Main Behavior:
             try:
                 if behavior == 0:
@@ -602,13 +588,6 @@ def Navigation(thread_name, robot, target):
                     raise ValueError("[ValueError] Invalid Behavior option!")
             except ValueError:
                 raise SystemError
-
-            # TODO:
-            # Log Motor Speeds
-            # if saveFile then
-            #     fUsensors: write(string.format("%.2f ", vLeft))
-            #     fUsensors: write(string.format("%.2f\n", vRight))
-            # end
 
             if debug:
                 robot.printUltraSensors()
@@ -621,12 +600,6 @@ def Navigation(thread_name, robot, target):
     except KeyboardInterrupt:  # sysCall_cleanup() # FIXME: Doesn't work
         print("Setting 0.0 velocity to motors, before disconnecting...")
         robot.stop()
-
-        # TODO:
-        # Close log file
-        # if saveFile then
-        #     fUsensors: close()
-        # end
 
 
 # ====== #
@@ -643,31 +616,29 @@ if __name__ == "__main__":
         robot = Pioneer()
         target = Target()
 
-        _, mapSensorHandle = getObjectFromSim('mapSensor')  # TODO: move outside of planning
-
-        res, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
-                                                                              sim.simx_opmode_streaming)
+        _, mapSensorHandle = getObjectFromSim('mapSensor')
+        res, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_streaming)
 
         # ----- Tasks ----- #
-        # Planning("", robot, target)
-        # Navigation("", robot, target)
-
-        thread1 = Thread(target=Planning, args=("Thread-1", robot, target, mapSensorHandle))
-        thread2 = Thread(target=Navigation, args=("Thread-2", robot, target))
+        thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
+        thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
+        thread3 = Thread(target=Planning,     args=("Thread-3", robot, target, mapSensorHandle))
+        thread4 = Thread(target=Navigation,   args=("Thread-4", robot, target))
 
         thread1.start()
-        print('[Thread-1] Planning started!')
+        print("[Thread-1] 'RobotStatus' started!")
         thread2.start()
-        print('[Thread-2] Navigation started!')
+        print("[Thread-2] 'TargetStatus' started!")
+        thread3.start()
+        print("[Thread-3] 'Planning' started!")
+        thread4.start()
+        print("[Thread-4] 'Navigation' started!")
 
-        try:
-            while sim.simxGetConnectionId(clientID) != -1:  # Actuation
-                thread1.join()
-                thread2.join()
-
-        except KeyboardInterrupt:  # FIXME: Doesn't work
-            print("Setting 0.0 velocity to motors, before disconnecting...")
-            robot.stop()
+        while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+            thread1.join()
+            thread2.join()
+            thread3.join()
+            thread4.join()
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

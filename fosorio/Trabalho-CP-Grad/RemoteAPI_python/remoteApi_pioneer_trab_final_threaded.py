@@ -594,8 +594,8 @@ def Planning(thread_name, robot, target, mapSensorHandle):
         target_pos_x_px, target_pos_y_px = coord_world2px(target.position.x, target.position.y)
 
         graph = GridWorld(image_resolution[0], image_resolution[1])
-        s_start = 'x{}y{}'.format(int(robot_pos_x_px), int(robot_pos_y_px))
-        s_goal = 'x{}y{}'.format(int(target_pos_x_px), int(target_pos_y_px))
+        s_start = 'x{}y{}'.format(int(robot_pos_y_px), int(robot_pos_x_px))
+        s_goal = 'x{}y{}'.format(int(target_pos_y_px), int(target_pos_x_px))
         goal_coords = stateNameToCoords(s_goal)
 
         graph.setStart(s_start)
@@ -626,9 +626,9 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
             image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
 
-            for j in range(image_grid_resolution[0]):
-                for i in range(image_grid_resolution[1]):
-                    graph.cells[i][j] = image_grid[j,i]
+            for i in range(image_grid_resolution[1]):
+                for j in range(image_grid_resolution[0]):
+                    graph.cells[i][j] = image_grid[i, j]
 
             print(image_grid_uint8[0,0])
 

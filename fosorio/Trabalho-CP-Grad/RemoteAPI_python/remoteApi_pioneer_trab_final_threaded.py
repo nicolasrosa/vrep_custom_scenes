@@ -28,12 +28,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from threading import Thread
 import time
+import pygame
 
 # =============== #
 #  Global Params  #
 # =============== #
 # Select Main Behavior:
-behavior = 1
+behavior = 0
 
 showPose = False
 saveFile = False
@@ -80,6 +81,65 @@ savedRz = -1
 braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
+# [Pygame] Variables Initialization
+# Define some colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+GRAY1 = (145, 145, 102)
+GRAY2 = (77, 77, 51)
+BLUE = (0, 0, 80)
+
+colors = {
+    0: WHITE,
+    1: GREEN,
+    -1: GRAY1,
+    -2: GRAY2
+}
+
+# This sets the WIDTH and HEIGHT of each grid location
+WIDTH = 6
+HEIGHT = 6
+
+# This sets the margin between each cell
+MARGIN = 1
+
+# Create a 2 dimensional array. A two dimensional
+# array is simply a list of lists.
+grid = []
+for row in range(10):
+    # Add an empty array that will hold each cell
+    # in this row
+    grid.append([])
+    for column in range(10):
+        grid[row].append(0)  # Append a cell
+
+# Set row 1, cell 5 to one. (Remember rows and
+# column numbers start at zero.)
+grid[1][5] = 1
+
+# Initialize pygame
+pygame.init()
+
+X_DIM = 128
+Y_DIM = 128
+VIEWING_RANGE = 3
+
+
+# Set the HEIGHT and WIDTH of the screen
+WINDOW_SIZE = [(WIDTH + MARGIN) * X_DIM + MARGIN,
+               (HEIGHT + MARGIN) * Y_DIM + MARGIN]
+screen = pygame.display.set_mode(WINDOW_SIZE)
+
+# Set title of screen
+pygame.display.set_caption("D* Lite Path Planning")
+
+# Loop until the user clicks the close button.
+done = False
+
+# Used to manage how fast the screen updates
+clock = pygame.time.Clock()
 
 # ========= #
 #  Classes  #
@@ -106,7 +166,7 @@ class Angeu:
 
 class Compass(Angeu):
     def __init__(self, suffix):
-        super().__init__(0.0, 0.0, 0.0)
+        super().__init__(-1, -1, -1)
         self.suffix = suffix
 
     def readData(self):
@@ -118,7 +178,7 @@ class Compass(Angeu):
 
 class GPS(Coord):
     def __init__(self, suffix):
-        super().__init__(0.0, 0.0, 0.0)
+        super().__init__(-1, -1, -1)
         self.suffix = suffix
 
     def readData(self):
@@ -156,6 +216,8 @@ class Pioneer:
         self.leftMotor = Actuator()
         self.rightMotor = Actuator()
         self.usensors = UltraSensors(0.5, 0.2)
+        self.position = GPS(self.name)
+        self.orientation = Compass(self.name)
 
         # Motors Initialization (remoteApi)
         _, self.leftMotor.Handle = getObjectFromSim('Pioneer_p3dx_leftMotor')
@@ -176,9 +238,9 @@ class Pioneer:
                     self.usensors.sensorHandle[i],
                     sim.simx_opmode_streaming)  # Mandatory First Read
 
-        self.position = GPS(self.name)
-        self.orientation = Compass(self.name)
-        # self.pose = # TODO:
+        self.position.readData()
+        self.orientation.readData()
+
 
     def readUltraSensors(self):
         for i in range(16):
@@ -286,7 +348,8 @@ class Target:
     def __init__(self):
         self.name = 'target'
         self.position = GPS(self.name)
-        self.pose = self.position
+
+        self.position.readData()
 
 
 # =========== #
@@ -310,11 +373,23 @@ def calculateDistances(p1, p2):
     return posDist, angDist
 
 
-def goto_old(robot, target):
+def goto_bug(robot, target):
     global leftDetection
     global rightDetection
     global obstacleDetected
 
+    # ----- Sensors ----- #
+    # Get Robot Ultrasonic Readings
+    robot.readUltraSensors()
+
+    # Get Robot Pose (Position & Orientation)
+    robot.position.readData()
+    robot.orientation.readData()
+
+    # Get Target Pose (Only Position)
+    target.position.readData()
+
+    # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
     posDist, angDist = calculateDistances(robot.position, target.position)
     angError = angDist - robot.orientation.rz
@@ -416,10 +491,12 @@ def goto(goal, px=False):
     if px:
         goal.x, goal.y = coord_px2world(goal.x, goal.y)
 
+    # ----- Sensors ----- #
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
     robot.orientation.readData()
 
+    # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
     posDist, angDist = calculateDistances(robot.position, goal)
     angError = angDist - robot.orientation.rz
@@ -454,6 +531,11 @@ def braitenberg(robot, v0):
     vLeft = v0
     vRight = v0
 
+    # ----- Sensors ----- #
+    # Get Robot Ultrasonic Readings
+    robot.readUltraSensors()
+
+    # ----- Actuators ----- #
     # Update Motors Speeds based on sensors readings
     for i in range(16):
         vLeft = vLeft + braitenbergL[i] * robot.usensors.detect[i]
@@ -482,6 +564,7 @@ def coord_world2px(x, y):
 def RobotStatus(thread_name, robot):
     # While the simulation is running, do
     while sim.simxGetConnectionId(clientID) != -1:  # sysCall_sensing()
+        # Get Robot Ultrasonic Readings
         robot.readUltraSensors()
 
         # Get Robot Pose (Position & Orientation)
@@ -494,31 +577,119 @@ def TargetStatus(thread_name, target):
         # Get Target Pose (Only Position)
         target.position.readData()
 
+firstTime = True
 
 def Planning(thread_name, robot, target, mapSensorHandle):
-    # from grid import GridWorld
-    # from d_star_lite.grid import GridWorld
-    # from d_star_lite import initDStarLite
+    from grid import GridWorld
+    from d_star_lite import initDStarLite, moveAndRescan
+    from utils import stateNameToCoords
 
-    # from d-star-lite.grid import GridWorld
-    # from .d_star_lite.grid import GridWorld
-    # from .d_star_lite.d_star_lite import initDStarLite
-    #
-    # graph = GridWorld(image_resolution[0], image_resolution[1])
-    # s_start = 'x1y2'
-    # s_goal = 'x5y4'
-    #
-    # graph.setStart(s_start)
-    # graph.setGoal(s_goal)
-    # k_m = 0
-    # queue = []
-    # graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
+    global done
 
-    # ------ #
-    #  Loop  #
-    # ------ #
+    if firstTime:
+        robot.position.readData()
+        target.position.readData()
+
+        robot_pos_x_px, robot_pos_y_px = coord_world2px(robot.position.x, robot.position.y)
+        target_pos_x_px, target_pos_y_px = coord_world2px(target.position.x, target.position.y)
+
+        graph = GridWorld(image_resolution[0], image_resolution[1])
+        s_start = 'x{}y{}'.format(int(robot_pos_x_px), int(robot_pos_y_px))
+        s_goal = 'x{}y{}'.format(int(target_pos_x_px), int(target_pos_y_px))
+        goal_coords = stateNameToCoords(s_goal)
+
+        graph.setStart(s_start)
+        graph.setGoal(s_goal)
+        k_m = 0
+        s_last = s_start
+        queue = []
+
+        graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
+
+        s_current = s_start
+        pos_coords = stateNameToCoords(s_current)
+
+        basicfont = pygame.font.SysFont('Comic Sans MS', WIDTH)
+
+        # print(graph)
+        print("s_start:", s_start)
+        print("s_goal:", s_goal)
+
     # While the simulation is running, do
-    while sim.simxGetConnectionId(clientID) != -1:
+    while not done and (sim.simxGetConnectionId(clientID) != -1):
+        for event in pygame.event.get():  # User did something
+            if event.type == pygame.QUIT:  # If user clicked close
+                done = True  # Flag that we are done so we exit this loop
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                # print('space bar! call next action')
+                s_new, k_m = moveAndRescan(
+                    graph, queue, s_current, VIEWING_RANGE, k_m)
+                if s_new == 'goal':
+                    print('Goal Reached!')
+                    done = True
+                else:
+                    # print('setting s_current to ', s_new)
+                    s_current = s_new
+                    pos_coords = stateNameToCoords(s_current)
+                    # print('got pos coords: ', pos_coords)
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # User clicks the mouse. Get the position
+                pos = pygame.mouse.get_pos()
+                # Change the x/y screen coordinates to grid coordinates
+                column = pos[0] // (WIDTH + MARGIN)
+                row = pos[1] // (HEIGHT + MARGIN)
+                # Set that location to one
+                if(graph.cells[row][column] == 0):
+                    graph.cells[row][column] = -1
+
+        # Set the screen background
+        screen.fill(BLACK)
+
+        # Draw the grid
+        for row in range(Y_DIM):
+            for column in range(X_DIM):
+                color = WHITE
+                # if grid[row][column] == 1:
+                #     color = GREEN
+                pygame.draw.rect(screen, colors[graph.cells[row][column]],
+                                 [(MARGIN + WIDTH) * column + MARGIN,
+                                  (MARGIN + HEIGHT) * row + MARGIN, WIDTH, HEIGHT])
+                node_name = 'x' + str(column) + 'y' + str(row)
+                if(graph.graph[node_name].g != float('inf')):
+                    # text = basicfont.render(
+                    # str(graph.graph[node_name].g), True, (0, 0, 200), (255,
+                    # 255, 255))
+                    text = basicfont.render(
+                        str(graph.graph[node_name].g), True, (0, 0, 200))
+                    textrect = text.get_rect()
+                    textrect.centerx = int(
+                        column * (WIDTH + MARGIN) + WIDTH / 2) + MARGIN
+                    textrect.centery = int(
+                        row * (HEIGHT + MARGIN) + HEIGHT / 2) + MARGIN
+                    screen.blit(text, textrect)
+
+        # fill in goal cell with GREEN
+        pygame.draw.rect(screen, GREEN, [(MARGIN + WIDTH) * goal_coords[0] + MARGIN,
+                                         (MARGIN + HEIGHT) * goal_coords[1] + MARGIN, WIDTH, HEIGHT])
+        # print('drawing robot pos_coords: ', pos_coords)
+        # draw moving robot, based on pos_coords
+        robot_center = [int(pos_coords[0] * (WIDTH + MARGIN) + WIDTH / 2) +
+                        MARGIN, int(pos_coords[1] * (HEIGHT + MARGIN) + HEIGHT / 2) + MARGIN]
+        # pygame.draw.circle(screen, RED, robot_center, int(WIDTH / 2) - 2)
+        pygame.draw.circle(screen, RED, robot_center, int(WIDTH))
+
+        # draw robot viewing range
+        pygame.draw.rect(
+            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (WIDTH + MARGIN), robot_center[1] - VIEWING_RANGE * (HEIGHT + MARGIN), 2 * VIEWING_RANGE * (WIDTH + MARGIN), 2 * VIEWING_RANGE * (HEIGHT + MARGIN)], 2)
+
+        # Limit to 60 frames per second
+        clock.tick(20)
+
+        # Go ahead and update the screen with what we've drawn.
+        pygame.display.flip()
+
+        # ------------------------------------------------------------------------------------------------------------ #
         res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
                                                                                    sim.simx_opmode_buffer)
 
@@ -527,8 +698,6 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             image_grid = (np.reshape(image_grid, image_grid_resolution + [3]) + 1) * 255  # (resX, resY, 3)
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
-            print("[{}] aki".format(thread_name))
-
             # Plot
             plt.figure(1)
             plt.imshow(image_grid)
@@ -536,14 +705,6 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             plt.draw()
             plt.pause(1e-4)
 
-            # print(image_grid)
-            # print(image_grid.shape, image_grid.dtype)
-            # print(np.min(image_grid), np.max(image_grid))
-
-            # robot.position.readData()
-            # target.position.readData()
-            #
-            # robot.position.printData()
             # print(coord_world2px(robot.position.x, robot.position.y))
             # target.position.printData()
             # print(coord_world2px(target.position.x, target.position.y))
@@ -556,10 +717,15 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             # goto(desiredPos)
 
             # debug = False
-            # if debug:
-            #     robot.position.printData()
-            #     desiredPos.print()
-            #     print()
+            if debug:
+                # print(image_grid)
+                # print(image_grid.shape, image_grid.dtype)
+                # print(np.min(image_grid), np.max(image_grid))
+
+                # desiredPos.print()
+                print()
+
+
 
         except ValueError:
             pass
@@ -581,8 +747,13 @@ def Navigation(thread_name, robot, target):
             # Select Main Behavior:
             try:
                 if behavior == 0:
-                    goto(robot, target)  # FIXME:
+                    # waypoints = [] # TODO: get from planner
+                    # for point in waypoints:
+                    #     goto_waypoints(robot, point)
+                    pass
                 elif behavior == 1:
+                    goto_bug(robot, target)  # FIXME:
+                elif behavior == 2:
                     braitenberg(robot, 2.0)
                 else:
                     raise ValueError("[ValueError] Invalid Behavior option!")
@@ -591,9 +762,9 @@ def Navigation(thread_name, robot, target):
 
             if debug:
                 robot.printUltraSensors()
-                robot.printMotorSpeeds()
                 robot.position.printData()
                 robot.orientation.printData()
+                robot.printMotorSpeeds()
                 target.position.printData()
                 print()
 
@@ -619,26 +790,27 @@ if __name__ == "__main__":
         _, mapSensorHandle = getObjectFromSim('mapSensor')
         res, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_streaming)
 
-        # ----- Tasks ----- #
-        thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
-        thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
+        # ----- Threads (Tasks) ----- #
+        # thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
+        # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
         thread3 = Thread(target=Planning,     args=("Thread-3", robot, target, mapSensorHandle))
         thread4 = Thread(target=Navigation,   args=("Thread-4", robot, target))
 
-        thread1.start()
-        print("[Thread-1] 'RobotStatus' started!")
-        thread2.start()
-        print("[Thread-2] 'TargetStatus' started!")
+        # thread1.start()
+        # print("[Thread-1] 'RobotStatus' started!")
+        # thread2.start()
+        # print("[Thread-2] 'TargetStatus' started!")
         thread3.start()
         print("[Thread-3] 'Planning' started!")
-        thread4.start()
-        print("[Thread-4] 'Navigation' started!")
+        # thread4.start() # TODO: Reativar
+        # print("[Thread-4] 'Navigation' started!") # TODO: Reativar
 
+        # ----- Loop ----- #
         while sim.simxGetConnectionId(clientID) != -1:  # Actuation
-            thread1.join()
-            thread2.join()
+            # thread1.join()
+            # thread2.join()
             thread3.join()
-            thread4.join()
+            # thread4.join() # TODO: Reativar
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.
@@ -647,6 +819,11 @@ if __name__ == "__main__":
         # Now close the connection to CoppeliaSim
         sim.simxFinish(clientID)
         print('Client Connection closed!')
+
+        # Be IDLE friendly. If you forget this line, the program will 'hang'
+        # on exit.
+        pygame.quit()
+
     else:
         print('Failed connecting to remote API server!')
 

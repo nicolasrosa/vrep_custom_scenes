@@ -29,7 +29,6 @@ import numpy as np
 from threading import Thread
 import time
 
-
 # =============== #
 #  Global Params  #
 # =============== #
@@ -59,8 +58,8 @@ clientID = sim.simxStart(serverIP, serverPort, True, True, timeOut, 5)
 scene_size = 25
 image_resolution = (128, 128)
 
-image_center_x = math.floor((image_resolution[0]-1)/2)
-image_center_y = math.floor((image_resolution[1]-1)/2)
+image_center_x = math.floor((image_resolution[0] - 1) / 2)
+image_center_y = math.floor((image_resolution[1] - 1) / 2)
 
 map_grid_resX = scene_size / image_resolution[0]
 map_grid_resY = scene_size / image_resolution[1]
@@ -94,6 +93,7 @@ class Coord:
     def print(self):
         print(self.x, self.y, self.z)
 
+
 class Angeu:
     def __init__(self, rx, ry, rz):
         self.rx = rx  # Alfa
@@ -102,6 +102,7 @@ class Angeu:
 
     def print(self):
         print(self.x, self.y, self.z)
+
 
 class Compass(Angeu):
     def __init__(self, suffix):
@@ -113,6 +114,7 @@ class Compass(Angeu):
 
     def printData(self):
         print("[{}] compassLP: {:1.4f}".format(self.suffix, self.rz))
+
 
 class GPS(Coord):
     def __init__(self, suffix):
@@ -163,7 +165,7 @@ class Pioneer:
         for i in range(16):
             self.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
             ret, self.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, self.usensors.sensorName[i],
-                                                                          sim.simx_opmode_oneshot_wait)
+                                                                         sim.simx_opmode_oneshot_wait)
 
             if ret != 0:
                 print("sensorHandle '{}' not found!".format(self.usensors.sensorName[i]))
@@ -222,7 +224,7 @@ class Pioneer:
     def printUltraSensors(self):
         msg = "[{}] ".format(self.name)
         for i in range(16):
-            msg += "S[{}]={:1.2f} ".format(i+1, self.usensors.detect[i])
+            msg += "S[{}]={:1.2f} ".format(i + 1, self.usensors.detect[i])
 
         print(msg)
 
@@ -232,7 +234,7 @@ class Pioneer:
     def rear(self, speed):
         self.setSpeeds(-speed, -speed)
 
-    def turnLeft(self,speed):
+    def turnLeft(self, speed):
         self.setSpeeds(-speed, speed)
 
     def turnRight(self, speed):
@@ -255,7 +257,7 @@ class Pioneer:
         ids = [1, 2, 15, 16]
 
         for id in ids:
-            if self.usensors.detect[id-1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectValue:
                 return True
 
         return False
@@ -265,7 +267,7 @@ class Pioneer:
         ids = [3, 4, 5, 6]
 
         for id in ids:
-            if self.usensors.detect[id-1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectValue:
                 return True
 
         return False
@@ -275,7 +277,7 @@ class Pioneer:
         ids = [7, 8, 9, 10]
 
         for id in ids:
-            if self.usensors.detect[id-1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectValue:
                 return True
 
         return False
@@ -285,7 +287,7 @@ class Pioneer:
         ids = [11, 12, 13, 14]
 
         for id in ids:
-            if self.usensors.detect[id-1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectValue:
                 return True
 
         return False
@@ -311,11 +313,13 @@ def getObjectFromSim(name):
 
     return ret, obj
 
+
 def calculateDistances(p1, p2):
-    posDist = math.sqrt((p1.x-p2.x)**2+(p1.y-p2.y)**2+(p1.z-p2.z)**2)
-    angDist = math.atan2(p2.y-p1.y, p2.x-p1.x)
+    posDist = math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2 + (p1.z - p2.z) ** 2)
+    angDist = math.atan2(p2.y - p1.y, p2.x - p1.x)
 
     return posDist, angDist
+
 
 def goto_old(robot, target):
     global leftDetection
@@ -371,7 +375,7 @@ def goto_old(robot, target):
                 if robot.check_obstacle_front() and robot.check_obstacle_left() and leftDetection:
                     print("Status: Obstacle on Front&Left, Turning Right")
 
-                    if obstacleDetected == False:
+                    if not obstacleDetected:
                         time.sleep(5)
                         savedRz = robot.orientation.rz
                         obstacleDetected = True
@@ -381,26 +385,28 @@ def goto_old(robot, target):
                 elif robot.check_obstacle_front() and robot.check_obstacle_right() and rightDetection:
                     print("Status: Obstacle on Front&Right, Turning Left")
 
-                    if obstacleDetected == False:
+                    if not obstacleDetected:
                         time.sleep(5)
                         savedRz = robot.orientation.rz
                         obstacleDetected = True
                         rightDetection = False
 
                     robot.turnLeft(0.5)
-                elif robot.check_obstacle_front() == False and (robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
-                    if abs(robot.usensors.detect[1-1] - robot.usensors.detect[16-1]) > 0.1 or abs(robot.usensors.detect[8-1] - robot.usensors.detect[9-1]) > 0.1:
+                elif not robot.check_obstacle_front() and (
+                        robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
+                    if abs(robot.usensors.detect[1 - 1] - robot.usensors.detect[16 - 1]) > 0.1 or abs(
+                            robot.usensors.detect[8 - 1] - robot.usensors.detect[9 - 1]) > 0.1:
                         turningSpeed = 0.1
-                        if robot.usensors.detect[1-1] > robot.usensors.detect[16-1]:
+                        if robot.usensors.detect[1 - 1] > robot.usensors.detect[16 - 1]:
                             print("Status: Aligning with Wall on Left, Turning Right")
                             robot.turnRight(turningSpeed)
-                        elif robot.usensors.detect[1-1] < robot.usensors.detect[16-1]:
+                        elif robot.usensors.detect[1 - 1] < robot.usensors.detect[16 - 1]:
                             print("Status: Aligning with Wall on Left, Turning Left")
                             robot.turnLeft(turningSpeed)
-                        elif robot.usensors.detect[8-1] > robot.usensors.detect[9-1]:
+                        elif robot.usensors.detect[8 - 1] > robot.usensors.detect[9 - 1]:
                             print("Status: Aligning with Wall on Right, Turning Left")
                             robot.turnLeft(turningSpeed)
-                        elif robot.usensors.detect[8-1] < robot.usensors.detect[9-1]:
+                        elif robot.usensors.detect[8 - 1] < robot.usensors.detect[9 - 1]:
                             print("Status: Aligning with Wall on Right, Turning Right")
                             robot.turnRight(turningSpeed)
 
@@ -411,7 +417,9 @@ def goto_old(robot, target):
                 elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
                     robot.rear(0.5)
 
-                elif robot.check_obstacle_front() and robot.check_obstacle_left() == False and robot.check_obstacle_right() == False:
+                elif robot.check_obstacle_front() and \
+                        not robot.check_obstacle_left() and \
+                        not robot.check_obstacle_right():
                     robot.turnLeft(0.5)
 
                 else:
@@ -420,6 +428,7 @@ def goto_old(robot, target):
                     robot.stop()
         else:
             robot.stop()
+
 
 def goto(goal, px=False):
     if px:
@@ -456,6 +465,7 @@ def goto(goal, px=False):
         else:
             robot.stop()
 
+
 def braitenberg(robot, v0):
     """Behavior: Braitenberg (Obstacle Avoidance, Wander)"""
     # Base Speed
@@ -470,17 +480,20 @@ def braitenberg(robot, v0):
     # Update Motor Speeds
     robot.setSpeeds(vLeft, vRight)
 
-def coord_px2world(u, v):
-    x = (u-image_center_x)*map_grid_resX
-    y = (v-image_center_y)*map_grid_resY
 
-    return (x, y)
+def coord_px2world(u, v):
+    x = (u - image_center_x) * map_grid_resX
+    y = (v - image_center_y) * map_grid_resY
+
+    return x, y
+
 
 def coord_world2px(x, y):
-    u = (x/map_grid_resX) + image_center_x
-    v = (y/map_grid_resY) + image_center_y
+    u = (x / map_grid_resX) + image_center_x
+    v = (y / map_grid_resY) + image_center_y
 
-    return (u, v)
+    return u, v
+
 
 def Planning(thread_name, robot, target, mapSensorHandle):
     # from grid import GridWorld
@@ -502,11 +515,12 @@ def Planning(thread_name, robot, target, mapSensorHandle):
     # graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
 
     while sim.simxGetConnectionId(clientID) != -1:  # Actuation
-        res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0, sim.simx_opmode_buffer)
+        res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
+                                                                                   sim.simx_opmode_buffer)
 
         try:  # First images are empty
             image_grid = np.array(image_grid_list)
-            image_grid = (np.reshape(image_grid, image_grid_resolution+[3])+1)*255  # (resX, resY, 3)
+            image_grid = (np.reshape(image_grid, image_grid_resolution + [3]) + 1) * 255  # (resX, resY, 3)
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
             print("[{}] aki".format(thread_name))
@@ -530,7 +544,6 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             # target.position.printData()
             # print(coord_world2px(target.position.x, target.position.y))
 
-
             # ----- Navigation ----- #
             # desiredPos_px = Coord(63, 63, 0.0)
             # goto(desiredPos_px, px=True)
@@ -544,11 +557,10 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             #     desiredPos.print()
             #     print()
 
-
         except ValueError:
             pass
 
-        except KeyboardInterrupt: # FIXME: Doesn't work
+        except KeyboardInterrupt:  # FIXME: Doesn't work
             print("Setting 0.0 velocity to motors, before disconnecting...")
             robot.stop()
 
@@ -606,7 +618,7 @@ def Navigation(thread_name, robot, target):
                 target.position.printData()
                 print()
 
-    except KeyboardInterrupt: # sysCall_cleanup() # FIXME: Doesn't work
+    except KeyboardInterrupt:  # sysCall_cleanup() # FIXME: Doesn't work
         print("Setting 0.0 velocity to motors, before disconnecting...")
         robot.stop()
 
@@ -653,12 +665,9 @@ if __name__ == "__main__":
                 thread1.join()
                 thread2.join()
 
-
-        except (KeyboardInterrupt):  # FIXME: Doesn't work
+        except KeyboardInterrupt:  # FIXME: Doesn't work
             print("Setting 0.0 velocity to motors, before disconnecting...")
             robot.stop()
-
-
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

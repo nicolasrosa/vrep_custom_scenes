@@ -99,11 +99,13 @@ colors = {
 }
 
 # This sets the WIDTH and HEIGHT of each grid location
-WIDTH = 6
-HEIGHT = 6
+if image_resolution[0] == 128:
+    GRID_HEIGHT, GRID_WIDTH = 7, 7
+elif image_resolution[0] == 512:
+    GRID_HEIGHT, GRID_WIDTH = 2, 2
 
 # This sets the margin between each cell
-MARGIN = 1
+MARGIN = 0
 
 # Create a 2 dimensional array. A two dimensional
 # array is simply a list of lists.
@@ -122,14 +124,14 @@ grid[1][5] = 1
 # Initialize pygame
 pygame.init()
 
-X_DIM = 128
-Y_DIM = 128
+X_DIM = image_resolution[0]
+Y_DIM = image_resolution[1]
 VIEWING_RANGE = 3
 
 
 # Set the HEIGHT and WIDTH of the screen
-WINDOW_SIZE = [(WIDTH + MARGIN) * X_DIM + MARGIN,
-               (HEIGHT + MARGIN) * Y_DIM + MARGIN]
+WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
+               (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
 screen = pygame.display.set_mode(WINDOW_SIZE)
 
 # Set title of screen
@@ -585,6 +587,7 @@ def Planning(thread_name, robot, target, mapSensorHandle):
     from utils import stateNameToCoords
 
     global done
+    global firstTime
 
     if firstTime:
         robot.position.readData()
@@ -609,11 +612,14 @@ def Planning(thread_name, robot, target, mapSensorHandle):
         s_current = s_start
         pos_coords = stateNameToCoords(s_current)
 
-        basicfont = pygame.font.SysFont('Comic Sans MS', WIDTH)
+        basicfont = pygame.font.SysFont('Comic Sans MS', GRID_WIDTH)
+
+        firstTime = False
 
         # print(graph)
         print("s_start:", s_start)
         print("s_goal:", s_goal)
+
 
     # While the simulation is running, do
     while not done and (sim.simxGetConnectionId(clientID) != -1):
@@ -626,18 +632,15 @@ def Planning(thread_name, robot, target, mapSensorHandle):
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
             image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
 
-            for i in range(image_grid_resolution[1]):
-                for j in range(image_grid_resolution[0]):
-                    graph.cells[i][j] = image_grid[i, j]
-
-            print(image_grid_uint8[0,0])
+            # Makes the detected obstacles by the mapSensor to be considered in the Pygame's graph
+            graph.cells = image_grid.tolist()
 
             # Plot
-            plt.figure(1)
-            plt.imshow(image_grid_uint8, cmap='Greys')
-            plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
-            plt.draw()
-            plt.pause(1e-4)
+            # plt.figure(1)
+            # plt.imshow(image_grid_uint8, cmap='Greys')
+            # plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
+            # plt.draw()
+            # plt.pause(1e-4)
 
             # print(coord_world2px(robot.position.x, robot.position.y))
             # target.position.printData()
@@ -672,8 +675,7 @@ def Planning(thread_name, robot, target, mapSensorHandle):
                 done = True  # Flag that we are done so we exit this loop
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 # print('space bar! call next action')
-                s_new, k_m = moveAndRescan(
-                    graph, queue, s_current, VIEWING_RANGE, k_m)
+                s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
                 if s_new == 'goal':
                     print('Goal Reached!')
                     done = True
@@ -681,14 +683,14 @@ def Planning(thread_name, robot, target, mapSensorHandle):
                     # print('setting s_current to ', s_new)
                     s_current = s_new
                     pos_coords = stateNameToCoords(s_current)
-                    # print('got pos coords: ', pos_coords)
+                    print('got pos coords: ', pos_coords)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # User clicks the mouse. Get the position
                 pos = pygame.mouse.get_pos()
                 # Change the x/y screen coordinates to grid coordinates
-                column = pos[0] // (WIDTH + MARGIN)
-                row = pos[1] // (HEIGHT + MARGIN)
+                column = pos[0] // (GRID_WIDTH + MARGIN)
+                row = pos[1] // (GRID_HEIGHT + MARGIN)
                 print(column, row)
                 # Set that location to one
                 if(graph.cells[row][column] == 0):
@@ -704,8 +706,8 @@ def Planning(thread_name, robot, target, mapSensorHandle):
                 # if grid[row][column] == 1:
                 #     color = GREEN
                 pygame.draw.rect(screen, colors[graph.cells[row][column]],
-                                 [(MARGIN + WIDTH) * column + MARGIN,
-                                  (MARGIN + HEIGHT) * row + MARGIN, WIDTH, HEIGHT])
+                                 [(MARGIN + GRID_WIDTH) * column + MARGIN,
+                                  (MARGIN + GRID_HEIGHT) * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
                 node_name = 'x' + str(column) + 'y' + str(row)
                 if(graph.graph[node_name].g != float('inf')):
                     # text = basicfont.render(
@@ -715,24 +717,24 @@ def Planning(thread_name, robot, target, mapSensorHandle):
                         str(graph.graph[node_name].g), True, (0, 0, 200))
                     textrect = text.get_rect()
                     textrect.centerx = int(
-                        column * (WIDTH + MARGIN) + WIDTH / 2) + MARGIN
+                        column * (GRID_WIDTH + MARGIN) + GRID_WIDTH / 2) + MARGIN
                     textrect.centery = int(
-                        row * (HEIGHT + MARGIN) + HEIGHT / 2) + MARGIN
+                        row * (GRID_HEIGHT + MARGIN) + GRID_HEIGHT / 2) + MARGIN
                     screen.blit(text, textrect)
 
-        # fill in goal cell with GREEN
-        pygame.draw.rect(screen, GREEN, [(MARGIN + WIDTH) * goal_coords[0] + MARGIN,
-                                         (MARGIN + HEIGHT) * goal_coords[1] + MARGIN, WIDTH, HEIGHT])
+        # fill in goal cell with RED
+        pygame.draw.rect(screen, RED, [(MARGIN + GRID_WIDTH) * goal_coords[0] + MARGIN,
+                                         (MARGIN + GRID_HEIGHT) * goal_coords[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
         # print('drawing robot pos_coords: ', pos_coords)
         # draw moving robot, based on pos_coords
-        robot_center = [int(pos_coords[0] * (WIDTH + MARGIN) + WIDTH / 2) +
-                        MARGIN, int(pos_coords[1] * (HEIGHT + MARGIN) + HEIGHT / 2) + MARGIN]
+        robot_center = [int(pos_coords[0] * (GRID_WIDTH + MARGIN) + GRID_WIDTH / 2) +
+                        MARGIN, int(pos_coords[1] * (GRID_HEIGHT + MARGIN) + GRID_HEIGHT / 2) + MARGIN]
         # pygame.draw.circle(screen, RED, robot_center, int(WIDTH / 2) - 2)
-        pygame.draw.circle(screen, RED, robot_center, int(WIDTH))
+        pygame.draw.circle(screen, GREEN, robot_center, int(GRID_WIDTH))
 
         # draw robot viewing range
         pygame.draw.rect(
-            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (WIDTH + MARGIN), robot_center[1] - VIEWING_RANGE * (HEIGHT + MARGIN), 2 * VIEWING_RANGE * (WIDTH + MARGIN), 2 * VIEWING_RANGE * (HEIGHT + MARGIN)], 2)
+            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH + MARGIN), robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT + MARGIN), 2 * VIEWING_RANGE * (GRID_WIDTH + MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT + MARGIN)], 2)
 
         # Limit to 60 frames per second
         clock.tick(20)

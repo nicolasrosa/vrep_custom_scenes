@@ -617,6 +617,56 @@ def Planning(thread_name, robot, target, mapSensorHandle):
 
     # While the simulation is running, do
     while not done and (sim.simxGetConnectionId(clientID) != -1):
+        res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
+                                                                                   sim.simx_opmode_buffer)
+
+        try:  # First images are empty
+            image_grid = np.array(image_grid_list)
+            image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:,:,0]  # data: [-1, 0]
+            image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
+            image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
+
+            for j in range(image_grid_resolution[0]):
+                for i in range(image_grid_resolution[1]):
+                    graph.cells[i][j] = image_grid[j,i]
+
+            print(image_grid_uint8[0,0])
+
+            # Plot
+            plt.figure(1)
+            plt.imshow(image_grid_uint8, cmap='Greys')
+            plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
+            plt.draw()
+            plt.pause(1e-4)
+
+            # print(coord_world2px(robot.position.x, robot.position.y))
+            # target.position.printData()
+            # print(coord_world2px(target.position.x, target.position.y))
+
+            # ----- Navigation ----- #
+            # desiredPos_px = Coord(63, 63, 0.0)
+            # goto(desiredPos_px, px=True)
+
+            # desiredPos = Coord(0.0, 0.0, 0.0)
+            # goto(desiredPos)
+
+            # debug = False
+            if debug:
+                # print(image_grid)
+                # print(image_grid.shape, image_grid.dtype)
+                # print(np.min(image_grid), np.max(image_grid))
+
+                # desiredPos.print()
+                print()
+
+        except ValueError:
+            pass
+
+        except KeyboardInterrupt:  # FIXME: Doesn't work
+            print("Setting 0.0 velocity to motors, before disconnecting...")
+            robot.stop()
+
+        # ------------------------------------------------------------------------------------------------------------ #
         for event in pygame.event.get():  # User did something
             if event.type == pygame.QUIT:  # If user clicked close
                 done = True  # Flag that we are done so we exit this loop
@@ -639,6 +689,7 @@ def Planning(thread_name, robot, target, mapSensorHandle):
                 # Change the x/y screen coordinates to grid coordinates
                 column = pos[0] // (WIDTH + MARGIN)
                 row = pos[1] // (HEIGHT + MARGIN)
+                print(column, row)
                 # Set that location to one
                 if(graph.cells[row][column] == 0):
                     graph.cells[row][column] = -1
@@ -689,55 +740,12 @@ def Planning(thread_name, robot, target, mapSensorHandle):
         # Go ahead and update the screen with what we've drawn.
         pygame.display.flip()
 
-        # ------------------------------------------------------------------------------------------------------------ #
-        res, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, mapSensorHandle, 0,
-                                                                                   sim.simx_opmode_buffer)
-
-        try:  # First images are empty
-            image_grid = np.array(image_grid_list)
-            image_grid = (np.reshape(image_grid, image_grid_resolution + [3]) + 1) * 255  # (resX, resY, 3)
-            image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
-
-            # Plot
-            plt.figure(1)
-            plt.imshow(image_grid)
-            plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
-            plt.draw()
-            plt.pause(1e-4)
-
-            # print(coord_world2px(robot.position.x, robot.position.y))
-            # target.position.printData()
-            # print(coord_world2px(target.position.x, target.position.y))
-
-            # ----- Navigation ----- #
-            # desiredPos_px = Coord(63, 63, 0.0)
-            # goto(desiredPos_px, px=True)
-
-            # desiredPos = Coord(0.0, 0.0, 0.0)
-            # goto(desiredPos)
-
-            # debug = False
-            if debug:
-                # print(image_grid)
-                # print(image_grid.shape, image_grid.dtype)
-                # print(np.min(image_grid), np.max(image_grid))
-
-                # desiredPos.print()
-                print()
 
 
 
-        except ValueError:
-            pass
 
-        except KeyboardInterrupt:  # FIXME: Doesn't work
-            print("Setting 0.0 velocity to motors, before disconnecting...")
-            robot.stop()
 
-        # print(image_grid.shape)
 
-        # if res == vrep.simx_return_ok:
-        #     res = vrep.simxSetVisionSensorImage(clientID, v1, image_grid, 0, vrep.simx_opmode_oneshot)
 
 
 def Navigation(thread_name, robot, target):

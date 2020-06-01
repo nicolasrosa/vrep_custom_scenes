@@ -1,5 +1,5 @@
 import heapq
-from utils import stateNameToCoords
+from modules.utils import stateNameToCoords
 
 
 def topKey(queue):

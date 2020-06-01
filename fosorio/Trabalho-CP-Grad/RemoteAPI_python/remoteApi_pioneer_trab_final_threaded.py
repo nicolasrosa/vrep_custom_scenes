@@ -12,25 +12,19 @@
 # =========== #
 #  Libraries  #
 # =========== #
-try:
-    from vrep import sim
-except ModuleNotFoundError:
-    print('--------------------------------------------------------------')
-    print('"sim.py" could not be imported. This means very probably that')
-    print('either "sim.py" or the remoteApi library could not be found.')
-    print('Make sure both are in the same folder as this file,')
-    print('or appropriately adjust the file "sim.py"')
-    print('--------------------------------------------------------------')
-    print('')
-import math
 import time
 from threading import Thread
+from modules.scene import Scene
+from modules.utils import *
+from modules import connection
 
 import numpy as np
 import pygame
-from d_star_lite import initDStarLite, moveAndRescan
-from grid import GridWorld
-from utils import stateNameToCoords
+from d_star_lite.d_star_lite import initDStarLite, moveAndRescan
+from d_star_lite.grid import GridWorld
+from modules.utils import stateNameToCoords
+from modules.pioneer import Pioneer
+from modules.target import Target
 
 # =============== #
 #  Global Params  #
@@ -42,14 +36,7 @@ showPose = False
 saveFile = False
 debug = True
 
-# Server Configuration Variables
-serverIP = '127.0.0.1'
-serverPort = 19999
-timeOut = 5000
-
-# Client Connection
-sim.simxFinish(-1)  # just in case, close all opened connections
-clientID = sim.simxStart(serverIP, serverPort, True, True, timeOut, 5)
+connection.init()
 
 # Open Data Tubes
 # Remote API doesn't have tubes, the communication is made through signals!
@@ -59,7 +46,8 @@ clientID = sim.simxStart(serverIP, serverPort, True, True, timeOut, 5)
 
 # [Planning] Variables Initialization
 scene_size = 25
-image_resolution = (128, 128)
+# image_resolution = (128, 128)
+image_resolution = (256, 256)
 # image_resolution = (512, 512)
 
 image_center_x = math.floor((image_resolution[0] - 1) / 2)
@@ -73,8 +61,8 @@ vStep = 0.5
 maxSpeed = 2.5
 
 # [goto] Variables Initialization
-posErrorTolerance = 0.5
-angErrorTolerance = 0.5
+posErrorTolerance = 0.3
+angErrorTolerance = 0.3
 obstacleDetected = False
 leftDetection = True
 rightDetection = True
@@ -104,6 +92,8 @@ colors = {
 # This sets the WIDTH and HEIGHT of each grid location
 if image_resolution[0] == 128:
     GRID_HEIGHT, GRID_WIDTH = 7, 7
+elif image_resolution[0] == 256:
+    GRID_HEIGHT, GRID_WIDTH = 3, 3
 elif image_resolution[0] == 512:
     GRID_HEIGHT, GRID_WIDTH = 2, 2
 
@@ -131,7 +121,6 @@ X_DIM = image_resolution[0]
 Y_DIM = image_resolution[1]
 VIEWING_RANGE = 3
 
-
 # Set the HEIGHT and WIDTH of the screen
 WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
                (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
@@ -146,244 +135,16 @@ done = False
 # Used to manage how fast the screen updates
 clock = pygame.time.Clock()
 
+
 # ========= #
 #  Classes  #
 # ========= #
-class Coord:
-    def __init__(self, x, y, z):
-        self.x = x
-        self.y = y
-        self.z = z
-
-    def print(self):
-        print(self.x, self.y, self.z)
-
-
-class Angeu:
-    def __init__(self, rx, ry, rz):
-        self.rx = rx  # Alfa
-        self.ry = ry  # Beta
-        self.rz = rz  # Gamma
-
-    def print(self):
-        print(self.x, self.y, self.z)
-
-
-class Compass(Angeu):
-    def __init__(self, suffix):
-        super().__init__(-1, -1, -1)
-        self.suffix = suffix
-
-    def readData(self):
-        _, self.rz = sim.simxGetFloatSignal(clientID, self.suffix + "_compassLP_Z", sim.simx_opmode_streaming)
-
-    def printData(self):
-        print("[{}] compassLP: {:1.4f}".format(self.suffix, self.rz))
-
-
-class GPS(Coord):
-    def __init__(self, suffix):
-        super().__init__(-1, -1, -1)
-        self.suffix = suffix
-
-    def readData(self):
-        _, self.x = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsX", sim.simx_opmode_streaming)
-        _, self.y = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsY", sim.simx_opmode_streaming)
-        _, self.z = sim.simxGetFloatSignal(clientID, self.suffix + "_gpsZ", sim.simx_opmode_streaming)
-
-    def printData(self):
-        # print(self.x, self.y, self.z)
-        print("[{}] x: {:2.4f}\ty: {:2.4f}\tz: {:2.4f}".format(self.suffix, self.x, self.y, self.z))
-
-    def list(self):
-        return [self.x, self.y, self.z]
-
-class Actuator:
-    def __init__(self):
-        self.Handle = 0
-        self.vel = 0.0
-
-
-class UltraSensors:
-    def __init__(self, noDetectionDist, maxDetectionDist):
-        self.sensorName = [''] * 16
-        self.sensorHandle = [None] * 16
-
-        # Pioneer's Usensors config/status variables
-        self.noDetectionDist = noDetectionDist
-        self.maxDetectionDist = maxDetectionDist
-
-        # Status
-        self.detect = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-
-class Pioneer:
-    def __init__(self):
-        self.name = 'robot'
-        self.leftMotor = Actuator()
-        self.rightMotor = Actuator()
-        self.usensors = UltraSensors(0.5, 0.2)
-        self.position = GPS(self.name)
-        self.orientation = Compass(self.name)
-
-        # Motors Initialization (remoteApi)
-        _, self.leftMotor.Handle = getObjectFromSim('Pioneer_p3dx_leftMotor')
-        _, self.rightMotor.Handle = getObjectFromSim('Pioneer_p3dx_rightMotor')
-
-        # Sensors Initialization (remoteApi)
-        for i in range(16):
-            self.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
-            ret, self.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, self.usensors.sensorName[i],
-                                                                         sim.simx_opmode_oneshot_wait)
-
-            if ret != 0:
-                print("sensorHandle '{}' not found!".format(self.usensors.sensorName[i]))
-            else:
-                print("Linked to the '{}' objHandle!".format(self.usensors.sensorName[i]))
-                ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
-                    clientID,
-                    self.usensors.sensorHandle[i],
-                    sim.simx_opmode_streaming)  # Mandatory First Read
-
-        self.position.readData()
-        self.orientation.readData()
-
-
-    def readUltraSensors(self):
-        for i in range(16):
-            ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
-                clientID, self.usensors.sensorHandle[i], sim.simx_opmode_buffer)
-            if ret == 0:
-                dist = coord[2]  # z-axis
-                if state > 0 and dist < self.usensors.noDetectionDist:
-                    if dist < self.usensors.maxDetectionDist:
-                        dist = self.usensors.maxDetectionDist
-
-                    self.usensors.detect[i] = 1 - ((dist - self.usensors.maxDetectionDist) /
-                                                   (self.usensors.noDetectionDist - self.usensors.maxDetectionDist))
-                else:
-                    self.usensors.detect[i] = 0
-            else:
-                self.usensors.detect[i] = 0
-
-
-    def setSpeeds(self, vLeft, vRight):
-        self.leftMotor.vel = vLeft
-        self.rightMotor.vel = vRight
-
-        sim.simxSetJointTargetVelocity(clientID, self.leftMotor.Handle, self.leftMotor.vel,
-                                       sim.simx_opmode_streaming)
-        sim.simxSetJointTargetVelocity(clientID, self.rightMotor.Handle, self.rightMotor.vel,
-                                       sim.simx_opmode_streaming)
-
-    def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format(self.name, self.leftMotor.vel, self.rightMotor.vel))
-
-    def printUltraSensors(self):
-        msg = "[{}] ".format(self.name)
-        for i in range(16):
-            msg += "S[{}]={:1.2f} ".format(i + 1, self.usensors.detect[i])
-
-        print(msg)
-
-    def forward(self, speed):
-        self.setSpeeds(speed, speed)
-
-    def rear(self, speed):
-        self.setSpeeds(-speed, -speed)
-
-    def turnLeft(self, speed):
-        self.setSpeeds(-speed, speed)
-
-    def turnRight(self, speed):
-        self.setSpeeds(speed, -speed)
-
-    def stop(self):
-        self.setSpeeds(0.0, 0.0)
-
-    def check_around_is_free(self):
-        detectValue = 0.5
-
-        for i in range(16):
-            if self.usensors.detect[i] >= 0.5:
-                return False
-
-        return True
-
-    def check_obstacle_left(self):
-        detectValue = 0.5
-        ids = [1, 2, 15, 16]
-
-        for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
-                return True
-
-        return False
-
-    def check_obstacle_front(self):
-        detectValue = 0.5
-        ids = [3, 4, 5, 6]
-
-        for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
-                return True
-
-        return False
-
-    def check_obstacle_right(self):
-        detectValue = 0.5
-        ids = [7, 8, 9, 10]
-
-        for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
-                return True
-
-        return False
-
-    def check_obstacle_rear(self):
-        detectValue = 0.5
-        ids = [11, 12, 13, 14]
-
-        for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
-                return True
-
-        return False
-
-
-class Target:
-    def __init__(self):
-        self.name = 'target'
-        self.position = GPS(self.name)
-
-        self.position.readData()
 
 
 # =========== #
 #  Functions  #
 # =========== #
-def getObjectFromSim(name):
-    ret, obj = sim.simxGetObjectHandle(clientID, name, sim.simx_opmode_oneshot_wait)
 
-    if ret != 0:
-        print("'{}' not found!".format(name))
-    else:
-        print("Linked to the '{}' objHandle!".format(name))
-
-    return ret, obj
-
-
-def calculateDistances(p1, p2):
-    posDist = math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2 + (p1.z - p2.z) ** 2)
-    angDist = math.atan2(p2.y - p1.y, p2.x - p1.x)
-
-    return posDist, angDist
-
-def calculateDistances2(p1, p2):
-    posDist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2)
-    angDist = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
-
-    return posDist, angDist
 
 def goto_bug(robot, target):
     global leftDetection
@@ -534,8 +295,8 @@ def goto(goal, px=False):
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
-            # robot.forward(1.0)
-            braitenberg(robot, 1.0)
+            robot.forward(1.0)
+            # braitenberg(robot, 1.0)
         else:
             robot.stop()
             return True
@@ -544,7 +305,7 @@ def goto(goal, px=False):
 
 
 def braitenberg(robot, v0):
-    """Behavior: Braitenberg (Obstacle Avoidance, Wander)"""
+    """Behavior: Braitenberg (Obstacle Avoidance, Wander)."""
     # Base Speed
     vLeft = v0
     vRight = v0
@@ -572,19 +333,21 @@ def coord_px2world(u, v):
 
 def coord_world2px(x, y):
     u = (x / map_grid_resX) + image_center_x
-    v = image_resolution[0]-((y / map_grid_resY) + image_center_y)
+    v = image_resolution[0] - ((y / map_grid_resY) + image_center_y)
 
     return u, v
 
+
 def print_img_info(img):
     print(img.dtype, np.min(img), np.max(img))
+
 
 # ========= #
 #  Threads  #
 # ========= #
 def RobotStatus(thread_name, robot):
     # While the simulation is running, do
-    while sim.simxGetConnectionId(clientID) != -1:  # sysCall_sensing()
+    while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Robot Ultrasonic Readings
         robot.readUltraSensors()
 
@@ -592,13 +355,16 @@ def RobotStatus(thread_name, robot):
         robot.position.readData()
         robot.orientation.readData()
 
+
 def TargetStatus(thread_name, target):
     # While the simulation is running, do
-    while sim.simxGetConnectionId(clientID) != -1:  # sysCall_sensing()
+    while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Target Pose (Only Position)
         target.position.readData()
 
+
 firstTime = True
+
 
 def Planning(thread_name, robot, target, scene):
     global done
@@ -633,7 +399,6 @@ def Planning(thread_name, robot, target, scene):
         graph.setGoal(s_goal)
 
         k_m = 0
-        s_last = s_start
         queue = []
 
         graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
@@ -650,16 +415,17 @@ def Planning(thread_name, robot, target, scene):
         print("s_goal:", s_goal, "\ts_goal_coords_px:", coord_px2world(s_goal_coords_px[0], s_goal_coords_px[1]))
 
     # While the simulation is running, do
-    while not done and (sim.simxGetConnectionId(clientID) != -1):
+    while not done and (sim.simxGetConnectionId(connection.clientID) != -1):
         # =================== #
         #  MapSensor Handler  #
         # =================== #
-        ret, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, scene.mapSensorHandle, 0,
+        ret, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(connection.clientID,
+                                                                                   scene.mapSensorHandle, 0,
                                                                                    sim.simx_opmode_buffer)
 
         try:  # First images are empty
             image_grid = np.array(image_grid_list)
-            image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:,:,0]  # data: [-1, 0]
+            image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:, :, 0]  # data: [-1, 0]
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
             # image_grid = (image_grid + 256).astype(np.uint8)  # (resX, resY, 1), data: [0, 255]
@@ -683,8 +449,8 @@ def Planning(thread_name, robot, target, scene):
             coords_start = stateNameToCoords(s_start)
             for j in [-1, 0, 1]:
                 for i in [-1, 0, 1]:
-                    if graph.cells[coords_start[1]+j][coords_start[0]+i] == -1:
-                        graph.cells[coords_start[1]+j][coords_start[0]+i] = 0
+                    if graph.cells[coords_start[1] + j][coords_start[0] + i] == -1:
+                        graph.cells[coords_start[1] + j][coords_start[0] + i] = 0
 
             # Handles the situation where the s_goal is inside a obstacle (target itself)
             coords_goal = stateNameToCoords(s_goal)
@@ -762,7 +528,7 @@ def Planning(thread_name, robot, target, scene):
                 row = pos[1] // (GRID_HEIGHT + MARGIN)
                 print(column, row)
                 # Set that location to one
-                if(graph.cells[row][column] == 0):
+                if graph.cells[row][column] == 0:
                     graph.cells[row][column] = -1
 
         # Set the screen background
@@ -778,7 +544,7 @@ def Planning(thread_name, robot, target, scene):
                                  [(MARGIN + GRID_WIDTH) * column + MARGIN,
                                   (MARGIN + GRID_HEIGHT) * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
                 node_name = 'x' + str(column) + 'y' + str(row)
-                if(graph.graph[node_name].g != float('inf')):
+                if graph.graph[node_name].g != float('inf'):
                     # text = basicfont.render(
                     # str(graph.graph[node_name].g), True, (0, 0, 200), (255,
                     # 255, 255))
@@ -793,7 +559,7 @@ def Planning(thread_name, robot, target, scene):
 
         # fill in goal cell with RED
         pygame.draw.rect(screen, RED, [(MARGIN + GRID_WIDTH) * s_goal_coords_px[0] + MARGIN,
-                                         (MARGIN + GRID_HEIGHT) * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+                                       (MARGIN + GRID_HEIGHT) * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
         # print('drawing robot pos_coords_px: ', pos_coords_px)
         # draw moving robot, based on pos_coords_px
         robot_center = [int(s_current_coords_px[0] * (GRID_WIDTH + MARGIN) + GRID_WIDTH / 2) +
@@ -803,7 +569,9 @@ def Planning(thread_name, robot, target, scene):
 
         # draw robot viewing range
         pygame.draw.rect(
-            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH + MARGIN), robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT + MARGIN), 2 * VIEWING_RANGE * (GRID_WIDTH + MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT + MARGIN)], 2)
+            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH + MARGIN),
+                           robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT + MARGIN),
+                           2 * VIEWING_RANGE * (GRID_WIDTH + MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT + MARGIN)], 2)
 
         # Limit to 60 frames per second
         clock.tick(20)
@@ -812,10 +580,9 @@ def Planning(thread_name, robot, target, scene):
         pygame.display.flip()
 
 
-
-
 waypoints = []
 navigationStart = False
+
 
 def Navigation(thread_name, robot, target):
     global waypoints
@@ -823,11 +590,11 @@ def Navigation(thread_name, robot, target):
 
     try:
         # While the simulation is running, do
-        while sim.simxGetConnectionId(clientID) != -1:  # sysCall_actuation()
+        while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_actuation()
             if navigationStart:
-                print('waypoints:')
-                for waypoint in waypoints:
-                    print(waypoint)
+                # print('waypoints:')
+                # for waypoint in waypoints:
+                #     print(waypoint)
 
                 # Select Main Behavior:
                 try:
@@ -862,30 +629,15 @@ def Navigation(thread_name, robot, target):
         print("Setting 0.0 velocity to motors, before disconnecting...")
         robot.stop()
 
-class Scene():
-    def __init__(self):
-        _, self.mapSensorHandle = getObjectFromSim('mapSensor')
-        ret, image_grid_resolution, image_grid = sim.simxGetVisionSensorImage(clientID, self.mapSensorHandle, 0, sim.simx_opmode_streaming)
-
-        _, self.waypointHandle = getObjectFromSim('waypoint')
-        ret, waypoint_pos = sim.simxGetObjectPosition(clientID, self.waypointHandle, -1, sim.simx_opmode_streaming)
-
-    def setWaypointPosition(self, newPos):
-        _ = sim.simxSetObjectPosition(clientID, self.waypointHandle, -1, newPos, sim.simx_opmode_oneshot);
-
-    def getWayPointPosition(self):
-        ret, waypoint_pos = sim.simxGetObjectPosition(clientID, self.waypointHandle, -1, sim.simx_opmode_buffer)
-
-        return waypoint_pos
 
 # ====== #
 #  Main  #
 # ====== #
 if __name__ == "__main__":
-    if clientID != -1:
+    if connection.clientID != -1:
         # Now send some data to CoppeliaSim in a non-blocking fashion:
         print('Connected to remote API server!')
-        sim.simxAddStatusbarMessage(clientID, 'Connected to remote API client!', sim.simx_opmode_oneshot)
+        sim.simxAddStatusbarMessage(connection.clientID, 'Connected to remote API client!', sim.simx_opmode_oneshot)
 
         # ----- Initialization ----- #
         #  Get Objects from Simulation  # sysCall_init()
@@ -896,8 +648,8 @@ if __name__ == "__main__":
         # ----- Threads (Tasks) ----- #
         # thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
         # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
-        thread3 = Thread(target=Planning,     args=("Thread-3", robot, target, scene))
-        thread4 = Thread(target=Navigation,   args=("Thread-4", robot, target))
+        thread3 = Thread(target=Planning, args=("Thread-3", robot, target, scene))
+        thread4 = Thread(target=Navigation, args=("Thread-4", robot, target))
 
         # thread1.start()
         # print("[Thread-1] 'RobotStatus' started!")
@@ -910,7 +662,7 @@ if __name__ == "__main__":
         print("[Thread-4] 'Navigation' started!")
 
         # ----- Loop ----- #
-        while sim.simxGetConnectionId(clientID) != -1:  # Actuation
+        while sim.simxGetConnectionId(connection.clientID) != -1:  # Actuation
             # thread1.join()
             # thread2.join()
             thread3.join()
@@ -918,10 +670,10 @@ if __name__ == "__main__":
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.
-        sim.simxGetPingTime(clientID)
+        sim.simxGetPingTime(connection.clientID)
 
         # Now close the connection to CoppeliaSim
-        sim.simxFinish(clientID)
+        sim.simxFinish(connection.clientID)
         print('Client Connection closed!')
 
         # Be IDLE friendly. If you forget this line, the program will 'hang'

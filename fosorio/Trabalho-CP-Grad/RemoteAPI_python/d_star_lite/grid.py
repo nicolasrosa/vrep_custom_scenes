@@ -1,4 +1,4 @@
-from graph import Node, Graph
+from d_star_lite.graph import Node, Graph
 
 
 class GridWorld(Graph):

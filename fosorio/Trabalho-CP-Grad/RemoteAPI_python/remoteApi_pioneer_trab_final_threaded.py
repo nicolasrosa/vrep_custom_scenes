@@ -601,6 +601,7 @@ def Planning(thread_name, robot, target, scene):
     global done
     global firstTime
     global waypoints
+    global navigationStart
 
     if firstTime:
         # Links Simulation coordinates to Graph Coordinates
@@ -673,7 +674,7 @@ def Planning(thread_name, robot, target, scene):
             # plt.imshow(image_grid_uint8, cmap='Greys')
             # plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
             # plt.draw()
-            # plt.pause(1e-4)
+            # plt.pause(1e-4)done
 
             debug = False
             if debug:
@@ -703,6 +704,7 @@ def Planning(thread_name, robot, target, scene):
                 if s_new == 'goal':
                     print('Goal Reached!')
                     done = True
+                    navigationStart = True
                 else:
                     # print('setting s_current to ', s_new)
                     s_current = s_new
@@ -710,7 +712,7 @@ def Planning(thread_name, robot, target, scene):
                     s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
                     waypoint = [s_current_coords[0], s_current_coords[1], 0.0]
                     waypoints.append(waypoint)
-                    scene.setWaypointPosition(waypoint)
+                    # scene.setWaypointPosition(waypoint)
 
                     print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
 
@@ -775,38 +777,43 @@ def Planning(thread_name, robot, target, scene):
 
 
 waypoints = []
+navigationStart = False
 
 def Navigation(thread_name, robot, target):
     global waypoints
+    global navigationStart
 
     try:
         # While the simulation is running, do
         while sim.simxGetConnectionId(clientID) != -1:  # sysCall_actuation()
             print(waypoints)
-            # Select Main Behavior:
-            try:
-                if behavior == 0:
-                    while len(waypoints) != 0:
-                        ret = goto(waypoints[0])
-                        if ret:
-                            waypoints.pop(0)
+            if navigationStart:
+                # Select Main Behavior:
+                try:
+                    if behavior == 0:
+                        while len(waypoints) != 0:
+                            ret = goto(waypoints[0])
+                            scene.setWaypointPosition(waypoints[0])
 
-                elif behavior == 1:
-                    goto_bug(robot, target)  # FIXME:
-                elif behavior == 2:
-                    braitenberg(robot, 2.0)
-                else:
-                    raise ValueError("[ValueError] Invalid Behavior option!")
-            except ValueError:
-                raise SystemError
+                            if ret:
+                                waypoints.pop(0)
 
-            if debug:
-                robot.printUltraSensors()
-                robot.position.printData()
-                robot.orientation.printData()
-                robot.printMotorSpeeds()
-                target.position.printData()
-                print()
+                    elif behavior == 1:
+                        goto_bug(robot, target)  # FIXME:
+                    elif behavior == 2:
+                        braitenberg(robot, 2.0)
+                    else:
+                        raise ValueError("[ValueError] Invalid Behavior option!")
+                except ValueError:
+                    raise SystemError
+
+                if debug:
+                    robot.printUltraSensors()
+                    robot.position.printData()
+                    robot.orientation.printData()
+                    robot.printMotorSpeeds()
+                    target.position.printData()
+                    print()
 
     except KeyboardInterrupt:  # sysCall_cleanup() # FIXME: Doesn't work
         print("Setting 0.0 velocity to motors, before disconnecting...")

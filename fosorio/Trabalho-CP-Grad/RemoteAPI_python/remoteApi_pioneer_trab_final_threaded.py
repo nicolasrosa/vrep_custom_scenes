@@ -13,7 +13,7 @@
 #  Libraries  #
 # =========== #
 try:
-    import sim
+    from vrep import sim
 except ModuleNotFoundError:
     print('--------------------------------------------------------------')
     print('"sim.py" could not be imported. This means very probably that')
@@ -26,11 +26,8 @@ import math
 import time
 from threading import Thread
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pygame
-from scipy.ndimage import binary_dilation
-from skimage.morphology import opening, erosion, closing, dilation, square
 from d_star_lite import initDStarLite, moveAndRescan
 from grid import GridWorld
 from utils import stateNameToCoords
@@ -575,7 +572,7 @@ def coord_px2world(u, v):
 
 def coord_world2px(x, y):
     u = (x / map_grid_resX) + image_center_x
-    v = 128-((y / map_grid_resY) + image_center_y)
+    v = image_resolution[0]-((y / map_grid_resY) + image_center_y)
 
     return u, v
 
@@ -651,8 +648,6 @@ def Planning(thread_name, robot, target, scene):
         # print(graph)
         print("s_start:", s_start, "\ts_start_coords:", coord_px2world(s_start_coords_px[0], s_start_coords_px[1]))
         print("s_goal:", s_goal, "\ts_goal_coords_px:", coord_px2world(s_goal_coords_px[0], s_goal_coords_px[1]))
-
-    kernel = np.ones((5, 5), np.uint8)
 
     # While the simulation is running, do
     while not done and (sim.simxGetConnectionId(clientID) != -1):

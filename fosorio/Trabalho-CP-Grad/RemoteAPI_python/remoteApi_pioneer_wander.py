@@ -13,7 +13,7 @@
 #  Libraries  #
 # =========== #
 try:
-    import sim
+    from vrep import sim
 except ModuleNotFoundError:
     print('--------------------------------------------------------------')
     print('"sim.py" could not be imported. This means very probably that')

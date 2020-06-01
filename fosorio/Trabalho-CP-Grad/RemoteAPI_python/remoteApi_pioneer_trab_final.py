@@ -13,7 +13,7 @@
 #  Libraries  #
 # =========== #
 try:
-    import sim
+    from vrep import sim
 except ModuleNotFoundError:
     print('--------------------------------------------------------------')
     print('"sim.py" could not be imported. This means very probably that')
@@ -160,7 +160,7 @@ class Pioneer:
         for i in range(16):
             self.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
             ret, self.usensors.sensorHandle[i] = sim.simxGetObjectHandle(clientID, self.usensors.sensorName[i],
-                                                                          sim.simx_opmode_oneshot_wait)
+                                                                         sim.simx_opmode_oneshot_wait)
 
             if ret != 0:
                 print("sensorHandle '{}' not found!".format(self.usensors.sensorName[i]))

@@ -24,11 +24,14 @@ except ModuleNotFoundError:
     print('')
 import math
 import time
-import matplotlib.pyplot as plt
-import numpy as np
 from threading import Thread
-import time
+
+import numpy as np
 import pygame
+
+from d_star_lite import initDStarLite, moveAndRescan
+from grid import GridWorld
+from utils import stateNameToCoords
 
 # =============== #
 #  Global Params  #
@@ -71,8 +74,8 @@ vStep = 0.5
 maxSpeed = 2.5
 
 # [goto] Variables Initialization
-posErrorTolerance = 0.1
-angErrorTolerance = 0.1
+posErrorTolerance = 0.5
+angErrorTolerance = 0.5
 obstacleDetected = False
 leftDetection = True
 rightDetection = True
@@ -193,6 +196,8 @@ class GPS(Coord):
         # print(self.x, self.y, self.z)
         print("[{}] x: {:2.4f}\ty: {:2.4f}\tz: {:2.4f}".format(self.suffix, self.x, self.y, self.z))
 
+    def list(self):
+        return [self.x, self.y, self.z]
 
 class Actuator:
     def __init__(self):
@@ -375,6 +380,11 @@ def calculateDistances(p1, p2):
 
     return posDist, angDist
 
+def calculateDistances2(p1, p2):
+    posDist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2)
+    angDist = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
+
+    return posDist, angDist
 
 def goto_bug(robot, target):
     global leftDetection
@@ -402,6 +412,7 @@ def goto_bug(robot, target):
         print("angDist: ", angDist)
         print("Rz: ", robot.orientation.rz)
         print("angError: ", angError)
+        print()
 
     # AngAlignment or GoForward?
     if abs(angError) > angErrorTolerance and robot.check_around_is_free():
@@ -492,7 +503,7 @@ def goto_bug(robot, target):
 
 def goto(goal, px=False):
     if px:
-        goal.x, goal.y = coord_px2world(goal.x, goal.y)
+        goal[0], goal[1] = coord_px2world(goal[0], goal[1])
 
     # ----- Sensors ----- #
     # Get Robot Pose (Position & Orientation)
@@ -501,7 +512,7 @@ def goto(goal, px=False):
 
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
-    posDist, angDist = calculateDistances(robot.position, goal)
+    posDist, angDist = calculateDistances2(robot.position.list(), goal)
     angError = angDist - robot.orientation.rz
 
     if debug:
@@ -509,6 +520,7 @@ def goto(goal, px=False):
         print("angDist: ", angDist)
         print("Rz: ", robot.orientation.rz)
         print("angError: ", angError)
+        print()
 
     # AngAlignment or GoForward?
     if abs(angError) > angErrorTolerance and robot.check_around_is_free():
@@ -526,6 +538,9 @@ def goto(goal, px=False):
             robot.forward(1.0)
         else:
             robot.stop()
+            return True
+
+    return False
 
 
 def braitenberg(robot, v0):
@@ -583,15 +598,12 @@ def TargetStatus(thread_name, target):
 firstTime = True
 
 def Planning(thread_name, robot, target, scene):
-    from grid import GridWorld
-    from d_star_lite import initDStarLite, moveAndRescan
-    from utils import stateNameToCoords
-
     global done
     global firstTime
     global waypoints
 
     if firstTime:
+        # Links Simulation coordinates to Graph Coordinates
         robot.position.readData()
         target.position.readData()
 
@@ -604,14 +616,18 @@ def Planning(thread_name, robot, target, scene):
         # print('gt:', robot.position.x, robot.position.y)
         # print('calc:', coord_px2world(robot_pos_x_px, robot_pos_y_px))
 
-        graph = GridWorld(image_resolution[0], image_resolution[1])
         s_start = 'x{}y{}'.format(int(robot_pos_x_px), int(robot_pos_y_px))
         s_start_coords_px = stateNameToCoords(s_start)
+        scene.setWaypointPosition([robot.position.x, robot.position.y, 0.0])
+
         s_goal = 'x{}y{}'.format(int(target_pos_x_px), int(target_pos_y_px))
         s_goal_coords_px = stateNameToCoords(s_goal)
 
+        # Starts Graph
+        graph = GridWorld(image_resolution[0], image_resolution[1])
         graph.setStart(s_start)
         graph.setGoal(s_goal)
+
         k_m = 0
         s_last = s_start
         queue = []
@@ -632,6 +648,9 @@ def Planning(thread_name, robot, target, scene):
 
     # While the simulation is running, do
     while not done and (sim.simxGetConnectionId(clientID) != -1):
+        # =================== #
+        #  MapSensor Handler  #
+        # =================== #
         ret, image_grid_resolution, image_grid_list = sim.simxGetVisionSensorImage(clientID, scene.mapSensorHandle, 0,
                                                                                    sim.simx_opmode_buffer)
 
@@ -639,8 +658,7 @@ def Planning(thread_name, robot, target, scene):
             image_grid = np.array(image_grid_list)
             image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:,:,0]  # data: [-1, 0]
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
-            # image_grid = image_grid.transpose()
-            image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
+            # image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
 
             # Makes the detected obstacles by the mapSensor to be considered in the Pygame's graph
             graph.cells = image_grid.tolist()
@@ -657,23 +675,11 @@ def Planning(thread_name, robot, target, scene):
             # plt.draw()
             # plt.pause(1e-4)
 
-            # print(coord_world2px(robot.position.x, robot.position.y))
-            # target.position.printData()
-            # print(coord_world2px(target.position.x, target.position.y))
-
-            # ----- Navigation ----- #
-            # desiredPos_px = Coord(63, 63, 0.0)
-            # goto(desiredPos_px, px=True)
-
-            # desiredPos = Coord(0.0, 0.0, 0.0)
-            # goto(desiredPos)
-
             debug = False
             if debug:
                 print(image_grid)
                 print(image_grid.shape, image_grid.dtype)
                 print(np.min(image_grid), np.max(image_grid))
-                # desiredPos.print()
                 print()
 
         except ValueError:
@@ -683,10 +689,14 @@ def Planning(thread_name, robot, target, scene):
             print("Setting 0.0 velocity to motors, before disconnecting...")
             robot.stop()
 
-        # ------------------------------------------------------------------------------------------------------------ #
+        # ======== #
+        #  Pygame  #
+        # ======== #
+        # Event Handler
         for event in pygame.event.get():  # User did something
             if event.type == pygame.QUIT:  # If user clicked close
                 done = True  # Flag that we are done so we exit this loop
+
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 # print('space bar! call next action')
                 s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
@@ -698,11 +708,11 @@ def Planning(thread_name, robot, target, scene):
                     s_current = s_new
                     s_current_coords_px = stateNameToCoords(s_current)
                     s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
-                    waypoints.append(s_current_coords)
-                    scene.setWaypointPosition([s_current_coords[0], s_current_coords[1], 0.0])
+                    waypoint = [s_current_coords[0], s_current_coords[1], 0.0]
+                    waypoints.append(waypoint)
+                    scene.setWaypointPosition(waypoint)
 
                     print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
-
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # User clicks the mouse. Get the position
@@ -777,7 +787,7 @@ def Navigation(thread_name, robot, target):
             try:
                 if behavior == 0:
                     while len(waypoints) != 0:
-                        ret = goto(robot, waypoints[0])
+                        ret = goto(waypoints[0])
                         if ret:
                             waypoints.pop(0)
 
@@ -837,27 +847,24 @@ if __name__ == "__main__":
         # thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
         # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
         thread3 = Thread(target=Planning,     args=("Thread-3", robot, target, scene))
-        # thread4 = Thread(target=Navigation,   args=("Thread-4", robot, target))
+        thread4 = Thread(target=Navigation,   args=("Thread-4", robot, target))
 
         # thread1.start()
         # print("[Thread-1] 'RobotStatus' started!")
         # thread2.start()
         # print("[Thread-2] 'TargetStatus' started!")
 
-        # TODO: Reativar linhas abaixo
         thread3.start()
         print("[Thread-3] 'Planning' started!")
-        # thread4.start()
-        # print("[Thread-4] 'Navigation' started!")
+        thread4.start()
+        print("[Thread-4] 'Navigation' started!")
 
         # ----- Loop ----- #
         while sim.simxGetConnectionId(clientID) != -1:  # Actuation
             # thread1.join()
             # thread2.join()
-            # TODO: Reativar linhas abaixo
             thread3.join()
-            # thread4.join()
-            pass
+            thread4.join()
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

@@ -26,9 +26,11 @@ import math
 import time
 from threading import Thread
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pygame
-
+from scipy.ndimage import binary_dilation
+from skimage.morphology import opening, erosion, closing, dilation, square
 from d_star_lite import initDStarLite, moveAndRescan
 from grid import GridWorld
 from utils import stateNameToCoords
@@ -535,7 +537,8 @@ def goto(goal, px=False):
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
-            robot.forward(1.0)
+            # robot.forward(1.0)
+            braitenberg(robot, 1.0)
         else:
             robot.stop()
             return True
@@ -575,6 +578,9 @@ def coord_world2px(x, y):
     v = 128-((y / map_grid_resY) + image_center_y)
 
     return u, v
+
+def print_img_info(img):
+    print(img.dtype, np.min(img), np.max(img))
 
 # ========= #
 #  Threads  #
@@ -646,6 +652,7 @@ def Planning(thread_name, robot, target, scene):
         print("s_start:", s_start, "\ts_start_coords:", coord_px2world(s_start_coords_px[0], s_start_coords_px[1]))
         print("s_goal:", s_goal, "\ts_goal_coords_px:", coord_px2world(s_goal_coords_px[0], s_goal_coords_px[1]))
 
+    kernel = np.ones((5, 5), np.uint8)
 
     # While the simulation is running, do
     while not done and (sim.simxGetConnectionId(clientID) != -1):
@@ -659,22 +666,37 @@ def Planning(thread_name, robot, target, scene):
             image_grid = np.array(image_grid_list)
             image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:,:,0]  # data: [-1, 0]
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
-            # image_grid_uint8 = (image_grid + 1)  # (resX, resY, 3), data: [0, 1]
+
+            # image_grid = (image_grid + 256).astype(np.uint8)  # (resX, resY, 1), data: [0, 255]
+            # image_grid = dilation(image_grid, square(3))
+            # image_grid = closing(image_grid, square(3))
+
+            # Plot
+            # plt.figure(1)
+            # plt.imshow(image_grid, cmap='Greys')
+            # plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
+            # plt.draw()
+            # plt.pause(1e-4)
+
+            # image_grid_morph = (image_grid-256).astype(np.int8)  # (resX, resY, 1), data: [-1, 0]
 
             # Makes the detected obstacles by the mapSensor to be considered in the Pygame's graph
+            # graph.cells = image_grid_morph.tolist()
             graph.cells = image_grid.tolist()
 
             # Handles the situation where the s_start is inside a obstacle (robot itself)
             coords_start = stateNameToCoords(s_start)
-            if graph.cells[coords_start[1]][coords_start[0]] == -1:
-                graph.cells[coords_start[1]][coords_start[0]] = 0
+            for j in [-1, 0, 1]:
+                for i in [-1, 0, 1]:
+                    if graph.cells[coords_start[1]+j][coords_start[0]+i] == -1:
+                        graph.cells[coords_start[1]+j][coords_start[0]+i] = 0
 
-            # Plot
-            # plt.figure(1)
-            # plt.imshow(image_grid_uint8, cmap='Greys')
-            # plt.title('Map Grid ({}x{})'.format(image_grid_resolution[0], image_grid_resolution[1]))
-            # plt.draw()
-            # plt.pause(1e-4)done
+            # Handles the situation where the s_goal is inside a obstacle (target itself)
+            coords_goal = stateNameToCoords(s_goal)
+            for j in [-1, 0, 1]:
+                for i in [-1, 0, 1]:
+                    if graph.cells[coords_goal[1] + j][coords_goal[0] + i] == -1:
+                        graph.cells[coords_goal[1] + j][coords_goal[0] + i] = 0
 
             debug = False
             if debug:
@@ -701,6 +723,7 @@ def Planning(thread_name, robot, target, scene):
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 # print('space bar! call next action')
                 s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
+
                 if s_new == 'goal':
                     print('Goal Reached!')
                     done = True
@@ -715,6 +738,26 @@ def Planning(thread_name, robot, target, scene):
                     # scene.setWaypointPosition(waypoint)
 
                     print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
+
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+                s_new = None
+                while s_new != 'goal':
+                    s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
+
+                    if s_new == 'goal':
+                        print('Goal Reached!')
+                        done = True
+                        navigationStart = True
+                    else:
+                        # print('setting s_current to ', s_new)
+                        s_current = s_new
+                        s_current_coords_px = stateNameToCoords(s_current)
+                        s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
+                        waypoint = [s_current_coords[0], s_current_coords[1], 0.0]
+                        waypoints.append(waypoint)
+                        # scene.setWaypointPosition(waypoint)
+
+                        print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # User clicks the mouse. Get the position
@@ -786,14 +829,19 @@ def Navigation(thread_name, robot, target):
     try:
         # While the simulation is running, do
         while sim.simxGetConnectionId(clientID) != -1:  # sysCall_actuation()
-            print(waypoints)
             if navigationStart:
+                print('waypoints:')
+                for waypoint in waypoints:
+                    print(waypoint)
+
                 # Select Main Behavior:
                 try:
                     if behavior == 0:
                         while len(waypoints) != 0:
-                            ret = goto(waypoints[0])
-                            scene.setWaypointPosition(waypoints[0])
+                            waypoint = waypoints[0]
+
+                            ret = goto(waypoint)
+                            scene.setWaypointPosition(waypoint)
 
                             if ret:
                                 waypoints.pop(0)

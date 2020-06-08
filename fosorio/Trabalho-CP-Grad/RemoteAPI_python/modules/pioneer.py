@@ -51,7 +51,7 @@ class UltraSensors:
                     sim.simx_opmode_streaming)  # Mandatory First Read
 
 
-    def readUltraSensors(self):
+    def readData(self):
         for i in range(16):
             ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
                 connection.clientID, self.sensorHandle[i], sim.simx_opmode_buffer)
@@ -71,8 +71,6 @@ class UltraSensors:
 class Pioneer:
     def __init__(self):
         self.name = 'robot'
-        self.position = GPS(self.name)
-        self.orientation = Compass(self.name)
 
         # Motors Initialization (remoteApi)
         self.leftMotor = Actuator('Pioneer_p3dx_leftMotor')
@@ -80,15 +78,13 @@ class Pioneer:
 
         # Sensors Initialization (remoteApi)
         self.usensors = UltraSensors(0.5, 0.2)
+        self.position = GPS(self.name)
+        self.orientation = Compass(self.name)
 
-        self.usensors.readUltraSensors()
+        self.usensors.readData()
         self.position.readData()
         self.orientation.readData()
         self.stop()
-
-    def setSpeeds(self, vLeft, vRight):
-        self.leftMotor.setSpeed(vLeft)
-        self.rightMotor.setSpeed(vRight)
 
     # ----- Status ----- #
     def printMotorSpeeds(self):
@@ -102,6 +98,10 @@ class Pioneer:
         print(msg)
 
     # ----- Basic Commands ----- #
+    def setSpeeds(self, vLeft, vRight):
+        self.leftMotor.setSpeed(vLeft)
+        self.rightMotor.setSpeed(vRight)
+
     def forward(self, speed):
         self.setSpeeds(speed, speed)
 

@@ -9,7 +9,7 @@ from modules.gps import GPS
 # ======= #
 class Target:
     def __init__(self):
-        self.name = 'target'
-        self.position = GPS(self.name)
+        self.objName = 'target'
+        self.position = GPS(self.objName)
 
         self.position.readData()

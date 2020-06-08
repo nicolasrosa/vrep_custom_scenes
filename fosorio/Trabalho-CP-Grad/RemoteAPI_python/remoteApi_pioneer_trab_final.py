@@ -582,7 +582,7 @@ def Navigation(robot, target):
         # While the simulation is running, do
         while sim.simxGetConnectionId(clientID) != -1:  # Actuation
             # ----- Sensors ----- #
-            robot.readUltraSensors()
+            robot.readData()
 
             # ----- Actuators ----- #
             # Select Main Behavior:

@@ -5,6 +5,8 @@ from vrep import sim
 from modules import connection
 import math
 
+def print_status_bar(message):
+    sim.simxAddStatusbarMessage(connection.clientID, message, sim.simx_opmode_oneshot)
 
 def getObjectFromSim(name):
     ret, obj = sim.simxGetObjectHandle(connection.clientID, name, sim.simx_opmode_oneshot_wait)

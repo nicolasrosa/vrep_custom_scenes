@@ -19,4 +19,4 @@ class Compass(Angeu):
                                             sim.simx_opmode_streaming)
 
     def printData(self):
-        print("[{}] compassLP: {:1.4f}".format(self.suffix, self.rz))
+        print("[{}] compassLP: {:1.4f}".format(self.suffix, self.rz), flush=True)

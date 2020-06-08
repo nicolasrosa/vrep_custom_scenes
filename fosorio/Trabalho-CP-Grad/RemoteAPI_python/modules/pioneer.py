@@ -89,14 +89,14 @@ class Pioneer:
 
     # ----- Status ----- #
     def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed))
+        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed), flush=True)
 
     def printUltraSensors(self):
         msg = "[{}] ".format('robot')
         for i in range(16):
             msg += "S[{}]={:1.2f} ".format(i + 1, self.usensors.detect[i])
 
-        print(msg)
+        print(msg, flush=True)
 
     # ----- Basic Commands ----- #
     def setSpeeds(self, vLeft, vRight):

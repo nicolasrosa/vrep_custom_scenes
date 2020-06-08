@@ -43,6 +43,11 @@ else:
 showPose = False
 saveFile = False
 debug = True
+debug1 = True
+debug2 = True
+debug3 = True
+
+isPaused = False
 
 # Shared Variables
 firstTime = True
@@ -78,7 +83,7 @@ braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0
 braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # [Pygame] Variables Initialization
-if behavior == 0:
+if doPlanning:
     # Define some colors
     BLACK = (0, 0, 0)
     WHITE = (255, 255, 255)
@@ -158,7 +163,6 @@ def goto_old(robot, target):
         print("angDist: ", angDist)
         print("Rz: ", robot.orientation.rz)
         print("angError: ", angError)
-        print()
 
     # AngAlignment or GoForward?
     if abs(angError) > angErrorTolerance and robot.check_around_is_free():
@@ -378,37 +382,39 @@ def reative_behavior2():
             robot.stop()
 
 def reative_behavior3():
-    print("Status: Obstacle Around!")
+    # print("Status: Obstacle Around!")
     if not robot.check_obstacle_front():
-        print("Status: PosAlignment, Going Forward")
+        print("Status: PosAlignment, Going Forward", flush=True)
         robot.forward(1.0)
     elif robot.check_obstacle_front():  # Too close!
         if robot.check_obstacle_left():
-            print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear")
+            print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear", flush=True)
             robot.turnRight(0.5)
             time.sleep(0.05)
             robot.rear(1.0)
             time.sleep(0.05)
         elif robot.check_obstacle_right():
-            print("Status: Avoiding Obstacle on Front-Right, Turning Left-Rear")
+            print("Status: Avoiding Obstacle on Front-Right, Turning Left-Rear", flush=True)
             robot.turnLeft(0.5)
             time.sleep(0.05)
             robot.rear(1.0)
             time.sleep(0.05)
         else:
-            print("Status: Avoiding Obstacle, Going Rear")
+            print("Status: Avoiding Obstacle, Going Rear", flush=True)
             robot.rear(1.0)
     elif not robot.check_obstacle_front() and robot.check_obstacle_left(0.95):
-        print("Status: Avoiding Obstacle, Turning Right")
+        print("Status: Avoiding Obstacle, Turning Right", flush=True)
         robot.turnRight(0.5)
     elif not robot.check_obstacle_front() and robot.check_obstacle_right(0.95):
-        print("Status: Avoiding Obstacle, Turning Left")
+        print("Status: Avoiding Obstacle, Turning Left", flush=True)
         robot.turnLeft(0.5)
     else:
-        print("Status: Nenhum dos casos")
+        print("Status: Nenhum dos casos", flush=True)
         robot.stop()
 
 def goto(goal, px=False):
+    global debug1, debug2, debug3
+
     if px:
         goal[0], goal[1] = coord_px2world(goal[0], goal[1])
 
@@ -428,56 +434,65 @@ def goto(goal, px=False):
     posDist, angDist = calculateDistances2(robot.position.list(), goal)
     angError = angDist - robot.orientation.rz
 
-    if debug:
+    if debug1:
         robot.printUltraSensors()
         robot.position.printData()
         robot.orientation.printData()
         robot.printMotorSpeeds()
         target.position.printData()
-        print()
 
-    if debug:
+    if debug2:
         print("Front:", robot.check_obstacle_front())
         print("Left: ", robot.check_obstacle_left())
         print("Right: ", robot.check_obstacle_right())
         print("Rear: ", robot.check_obstacle_rear())
 
-    if debug:
+    if debug3:
         print("posDist: ", posDist)
         print("angDist: ", angDist)
         print("Rz: ", robot.orientation.rz)
         print("angError: ", angError)
-        print()
 
     # AngAlignment or GoForward?
     if abs(angError) > angErrorTolerance and robot.check_around_is_free():
         if angError > 0:  # Positive
-            if not robot.check_obstacle_left():
-                print("Status: AngAlignment, Turning Left")
-                # robot.turnLeft(abs(angError))
-                robot.turnLeft(0.25)
-            else:
-                print("Status: AngAlignment, CAN'T Turning Left!")
-                robot.stop()
+            # Try 1
+            print("Status: AngAlignment, Turning Left", flush=True)
+            robot.turnLeft(0.25)
+
+            # Try 2
+            # if not robot.check_obstacle_left():
+            #     print("Status: AngAlignment, Turning Left", flush=True)
+                # robot.turnLeft(0.25)
+            # else:
+            #     print("Status: AngAlignment, CAN'T Turning Left!", flush=True)
+            #     robot.stop()
         else:  # Negative
-            if not robot.check_obstacle_right():
-                print("Status: AngAlignment, Turning Right")
-                # robot.turnRight(abs(angError))
-                robot.turnRight(0.25)
-            else:
-                print("Status: AngAlignment, CAN'T Turning Right!")
-                robot.stop()
+            # Try 1
+            print("Status: AngAlignment, Turning Right", flush=True)
+            robot.turnRight(0.25)
+
+            # Try 2
+            # if not robot.check_obstacle_right():
+            #     print("Status: AngAlignment, Turning Right", flush=True)
+            #     # robot.turnRight(abs(angError))
+            #     robot.turnRight(0.25)
+            # else:
+            #     print("Status: AngAlignment, CAN'T Turning Right!", flush=True)
+            #     robot.stop()
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
-            robot.forward(1.0)
+            # robot.forward(1.0)
             # braitenberg(robot, 1.0)
             # reative_behavior1()
             # reative_behavior2()
-            # reative_behavior3()
+            reative_behavior3()
         else:
             robot.stop()
             return True
+
+    print('---')
 
     return False
 
@@ -547,6 +562,8 @@ def Planning(thread_name, robot, target, scene):
     global waypoints
     global navigationStart
     global runThreads
+    global isPaused
+    global debug1, debug2, debug3
 
     if firstTime:
         # Links Simulation coordinates to Graph Coordinates
@@ -659,7 +676,7 @@ def Planning(thread_name, robot, target, scene):
                 s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
 
                 if s_new == 'goal':
-                    print('Goal Reached!')
+                    print('Goal Reached!\n')
                     done = True
                     navigationStart = True
                 else:
@@ -679,7 +696,7 @@ def Planning(thread_name, robot, target, scene):
                     s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
 
                     if s_new == 'goal':
-                        print('Goal Reached!')
+                        print('Goal Reached!\n')
                         done = True
                         navigationStart = True
                     else:
@@ -743,6 +760,19 @@ def Planning(thread_name, robot, target, scene):
         # Go ahead and update the screen with what we've drawn.
         pygame.display.flip()
 
+    while True:
+        for event in pygame.event.get():  # User did something
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                print('Paused!')
+                isPaused = not isPaused
+                robot.stop()
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_1:
+                debug1 = not debug1
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_2:
+                debug2 = not debug2
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_3:
+                debug3 = not debug3
+
 
 def follow_waypoints(scene):
     global waypoints
@@ -752,13 +782,15 @@ def follow_waypoints(scene):
         scene.setWaypointPosition(waypoint)
 
         while goto(waypoint) is False:
-            pass
+            while isPaused:
+                pass
 
         waypoints.pop(0)
 
 def Navigation(thread_name, robot, target, scene):
     global navigationStart
     global runThreads
+    global isPaused
 
     # While the simulation is running, do
     while sim.simxGetConnectionId(connection.clientID) != -1 and runThreads:  # sysCall_actuation()

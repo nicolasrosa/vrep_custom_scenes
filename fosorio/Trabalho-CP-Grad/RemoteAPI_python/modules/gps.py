@@ -21,7 +21,7 @@ class GPS(Coord):
 
     def printData(self):
         # print(self.x, self.y, self.z)
-        print("[{}] x: {:2.4f}\ty: {:2.4f}\tz: {:2.4f}".format(self.suffix, self.x, self.y, self.z))
+        print("[{}] x: {:2.4f}\ty: {:2.4f}\tz: {:2.4f}".format(self.suffix, self.x, self.y, self.z), flush=True)
 
     def list(self):
         return [self.x, self.y, self.z]

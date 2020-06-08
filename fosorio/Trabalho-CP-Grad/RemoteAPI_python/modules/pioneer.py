@@ -69,8 +69,9 @@ class UltraSensors:
                 self.detect[i] = 0
 
 class Pioneer:
-    def __init__(self):
-        self.name = 'robot'
+    def __init__(self, objName):
+        self.objName = objName
+        _, self.Handle = getObjectFromSim(self.objName)
 
         # Motors Initialization (remoteApi)
         self.leftMotor = Actuator('Pioneer_p3dx_leftMotor')
@@ -78,8 +79,8 @@ class Pioneer:
 
         # Sensors Initialization (remoteApi)
         self.usensors = UltraSensors(0.5, 0.2)
-        self.position = GPS(self.name)
-        self.orientation = Compass(self.name)
+        self.position = GPS('robot')
+        self.orientation = Compass('robot')
 
         self.usensors.readData()
         self.position.readData()
@@ -88,10 +89,10 @@ class Pioneer:
 
     # ----- Status ----- #
     def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format(self.name, self.leftMotor.speed, self.rightMotor.speed))
+        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed))
 
     def printUltraSensors(self):
-        msg = "[{}] ".format(self.name)
+        msg = "[{}] ".format('robot')
         for i in range(16):
             msg += "S[{}]={:1.2f} ".format(i + 1, self.usensors.detect[i])
 

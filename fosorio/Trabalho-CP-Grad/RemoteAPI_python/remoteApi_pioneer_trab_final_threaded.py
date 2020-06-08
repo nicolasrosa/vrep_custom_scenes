@@ -26,12 +26,14 @@ from d_star_lite.grid import GridWorld
 from modules.utils import stateNameToCoords
 from modules.pioneer import Pioneer
 from modules.target import Target
+import matplotlib.pyplot as plt
+
 
 # =============== #
 #  Global Params  #
 # =============== #
 # Select Main Behavior:
-behavior = 2
+behavior = 0
 
 if behavior == 0:
     doPlanning = True
@@ -41,15 +43,15 @@ else:
 showPose = False
 saveFile = False
 debug = True
+
+# Shared Variables
+firstTime = True
+waypoints = []
 runThreads = True
+navigationStart = False
 
+# RemoteAPI Connection Initialization
 connection.init()
-
-# Open Data Tubes
-# Remote API doesn't have tubes, the communication is made through signals!
-# gpsCommunicationTube_robot = sim.tubeOpen(0, 'gpsData_robot', 1)
-# gyroCommunicationTube_robot = sim.tubeOpen(0, 'gyroData_robot', 1)
-# gpsCommunicationTube_target = sim.tubeOpen(0, 'gpsData_target', 1)
 
 # [Planning] Variables Initialization
 scene_size = 25
@@ -62,10 +64,6 @@ image_center_y = math.floor((image_resolution[1] - 1) / 2)
 
 map_grid_resX = scene_size / image_resolution[0]
 map_grid_resY = scene_size / image_resolution[1]
-
-# [Robot] Variables Initialization
-vStep = 0.5
-maxSpeed = 2.5
 
 # [goto] Variables Initialization
 posErrorTolerance = 0.3
@@ -105,37 +103,25 @@ if behavior == 0:
     elif image_resolution[0] == 512:
         GRID_HEIGHT, GRID_WIDTH = 2, 2
 
-    # This sets the margin between each cell
-    MARGIN = 0
+    # Set the HEIGHT and WIDTH of the screen
+    X_DIM = image_resolution[0]
+    Y_DIM = image_resolution[1]
+    MARGIN = 0  # This sets the margin between each cell
+    WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
+                   (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
 
-    # Create a 2 dimensional array. A two dimensional
-    # array is simply a list of lists.
-    grid = []
-    for row in range(10):
-        # Add an empty array that will hold each cell
-        # in this row
-        grid.append([])
-        for column in range(10):
-            grid[row].append(0)  # Append a cell
+    GRID_WIDTH_MARGIN = GRID_WIDTH + MARGIN
+    GRID_HEIGHT_MARGIN = GRID_HEIGHT + MARGIN
+    GRID_WIDTH_by_2 = GRID_WIDTH / 2
+    GRID_HEIGHT_by_2 = GRID_HEIGHT /2
 
-    # Set row 1, cell 5 to one. (Remember rows and
-    # column numbers start at zero.)
-    grid[1][5] = 1
+    VIEWING_RANGE = 3
 
     # Initialize pygame
     pygame.init()
-
-    X_DIM = image_resolution[0]
-    Y_DIM = image_resolution[1]
-    VIEWING_RANGE = 3
-
-    # Set the HEIGHT and WIDTH of the screen
-    WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
-                   (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
     screen = pygame.display.set_mode(WINDOW_SIZE)
-
-    # Set title of screen
-    pygame.display.set_caption("D* Lite Path Planning")
+    pygame.display.set_caption("D* Lite Path Planning")  # Set title of screen
+    basicfont = pygame.font.SysFont('Comic Sans MS', GRID_WIDTH)
 
     # Loop until the user clicks the close button.
     done = False
@@ -153,7 +139,7 @@ def goto_old(robot, target):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.usensors.readUltraSensors()
+    robot.usensors.readData()
 
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
@@ -428,7 +414,7 @@ def goto(goal, px=False):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.usensors.readUltraSensors()
+    robot.usensors.readData()
 
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
@@ -464,7 +450,7 @@ def goto(goal, px=False):
         print()
 
     # AngAlignment or GoForward?
-    if abs(angError) > angErrorTolerance:
+    if abs(angError) > angErrorTolerance and robot.check_around_is_free():
         if angError > 0:  # Positive
             if not robot.check_obstacle_left():
                 print("Status: AngAlignment, Turning Left")
@@ -504,7 +490,7 @@ def braitenberg(robot, v0):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.usensors.readUltraSensors()
+    robot.usensors.readData()
 
     # ----- Actuators ----- #
     # Update Motors Speeds based on sensors readings
@@ -541,7 +527,7 @@ def RobotStatus(thread_name, robot):
     # While the simulation is running, do
     while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Robot Ultrasonic Readings
-        robot.usensors.readUltraSensors()
+        robot.usensors.readData()
 
         # Get Robot Pose (Position & Orientation)
         robot.position.readData()
@@ -553,9 +539,6 @@ def TargetStatus(thread_name, target):
     while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Target Pose (Only Position)
         target.position.readData()
-
-
-firstTime = True
 
 
 def Planning(thread_name, robot, target, scene):
@@ -573,12 +556,6 @@ def Planning(thread_name, robot, target, scene):
         robot_pos_x_px, robot_pos_y_px = coord_world2px(robot.position.x, robot.position.y)
         target_pos_x_px, target_pos_y_px = coord_world2px(target.position.x, target.position.y)
 
-        # print(robot_pos_x_px, robot_pos_y_px)
-        # print(target_pos_x_px, target_pos_y_px)
-        # print('real proof')
-        # print('gt:', robot.position.x, robot.position.y)
-        # print('calc:', coord_px2world(robot_pos_x_px, robot_pos_y_px))
-
         s_start = 'x{}y{}'.format(int(robot_pos_x_px), int(robot_pos_y_px))
         s_start_coords_px = stateNameToCoords(s_start)
         scene.setWaypointPosition([robot.position.x, robot.position.y, 0.0])
@@ -591,19 +568,19 @@ def Planning(thread_name, robot, target, scene):
         graph.setStart(s_start)
         graph.setGoal(s_goal)
 
-        k_m = 0
-        queue = []
-
-        graph, queue, k_m = initDStarLite(graph, queue, s_start, s_goal, k_m)
+        graph, queue, k_m = initDStarLite(graph, queue=[], s_start=s_start, s_goal=s_goal, k_m=0)
 
         s_current = s_start
         s_current_coords_px = stateNameToCoords(s_current)
 
-        basicfont = pygame.font.SysFont('Comic Sans MS', GRID_WIDTH)
-
         firstTime = False
 
         # print(graph)
+        # print(robot_pos_x_px, robot_pos_y_px)
+        # print(target_pos_x_px, target_pos_y_px)
+        # print('real proof')
+        # print('gt:', robot.position.x, robot.position.y)
+        # print('calc:', coord_px2world(robot_pos_x_px, robot_pos_y_px))
         print("s_start:", s_start, "\ts_start_coords:", coord_px2world(s_start_coords_px[0], s_start_coords_px[1]))
         print("s_goal:", s_goal, "\ts_goal_coords_px:", coord_px2world(s_goal_coords_px[0], s_goal_coords_px[1]))
 
@@ -616,14 +593,20 @@ def Planning(thread_name, robot, target, scene):
                                                                                    scene.mapSensorHandle, 0,
                                                                                    sim.simx_opmode_buffer)
 
-        try:  # First images are empty
+        try:  # First images from buffer are empty
             image_grid = np.array(image_grid_list)
             image_grid = np.reshape(image_grid, image_grid_resolution + [3])[:, :, 0]  # data: [-1, 0]
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
-            # image_grid = (image_grid + 256).astype(np.uint8)  # (resX, resY, 1), data: [0, 255]
-            # image_grid = dilation(image_grid, square(3))
+            image_grid = (image_grid + 256).astype(np.uint8)  # (resX, resY, 1), data: [0, 255]
+            image_grid = dilation(image_grid, square(5))
             # image_grid = closing(image_grid, square(3))
+
+            # Remove Robot and Target from Map Grid
+            _ = sim.simxSetModelProperty(connection.clientID, robot.Handle, sim.sim_modelproperty_not_renderable,
+                                         sim.simx_opmode_oneshot)
+            _ = sim.simxSetModelProperty(connection.clientID, target.Handle, sim.sim_modelproperty_not_renderable,
+                                         sim.simx_opmode_oneshot)
 
             # Plot
             # plt.figure(1)
@@ -632,25 +615,26 @@ def Planning(thread_name, robot, target, scene):
             # plt.draw()
             # plt.pause(1e-4)
 
-            # image_grid_morph = (image_grid-256).astype(np.int8)  # (resX, resY, 1), data: [-1, 0]
+            image_grid_morph = (image_grid-256).astype(np.int8)  # (resX, resY, 1), data: [-1, 0]
 
             # Makes the detected obstacles by the mapSensor to be considered in the Pygame's graph
-            # graph.cells = image_grid_morph.tolist()
-            graph.cells = image_grid.tolist()
+            graph.cells = image_grid_morph.tolist()
+            # graph.cells = image_grid.tolist()
 
-            # Handles the situation where the s_start is inside a obstacle (robot itself)
-            coords_start = stateNameToCoords(s_start)
-            for j in [-1, 0, 1]:
-                for i in [-1, 0, 1]:
-                    if graph.cells[coords_start[1] + j][coords_start[0] + i] == -1:
-                        graph.cells[coords_start[1] + j][coords_start[0] + i] = 0
-
-            # Handles the situation where the s_goal is inside a obstacle (target itself)
-            coords_goal = stateNameToCoords(s_goal)
-            for j in [-1, 0, 1]:
-                for i in [-1, 0, 1]:
-                    if graph.cells[coords_goal[1] + j][coords_goal[0] + i] == -1:
-                        graph.cells[coords_goal[1] + j][coords_goal[0] + i] = 0
+            # # Handles the situation where the s_start is inside a obstacle (robot itself)
+            # coords_start = stateNameToCoords(s_start)
+            # neighbors = [-3, -2, -1, 0, 1, 2, 3]
+            # for j in neighbors:
+            #     for i in neighbors:
+            #         if graph.cells[coords_start[1] + j][coords_start[0] + i] == -1:
+            #             graph.cells[coords_start[1] + j][coords_start[0] + i] = 0
+            #
+            # # Handles the situation where the s_goal is inside a obstacle (target itself)
+            # coords_goal = stateNameToCoords(s_goal)
+            # for j in neighbors:
+            #     for i in neighbors:
+            #         if graph.cells[coords_goal[1] + j][coords_goal[0] + i] == -1:
+            #             graph.cells[coords_goal[1] + j][coords_goal[0] + i] = 0
 
             debug = False
             if debug:
@@ -713,8 +697,8 @@ def Planning(thread_name, robot, target, scene):
                 # User clicks the mouse. Get the position
                 pos = pygame.mouse.get_pos()
                 # Change the x/y screen coordinates to grid coordinates
-                column = pos[0] // (GRID_WIDTH + MARGIN)
-                row = pos[1] // (GRID_HEIGHT + MARGIN)
+                column = pos[0] // (GRID_WIDTH_MARGIN)
+                row = pos[1] // (GRID_HEIGHT_MARGIN)
                 print(column, row)
                 # Set that location to one
                 if graph.cells[row][column] == 0:
@@ -726,37 +710,28 @@ def Planning(thread_name, robot, target, scene):
         # Draw the grid
         for row in range(Y_DIM):
             for column in range(X_DIM):
-                color = WHITE
-                # if grid[row][column] == 1:
-                #     color = GREEN
                 pygame.draw.rect(screen, colors[graph.cells[row][column]],
-                                 [(MARGIN + GRID_WIDTH) * column + MARGIN,
-                                  (MARGIN + GRID_HEIGHT) * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+                                 [(GRID_WIDTH_MARGIN) * column + MARGIN,
+                                  (GRID_HEIGHT_MARGIN) * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
                 node_name = 'x' + str(column) + 'y' + str(row)
                 if graph.graph[node_name].g != float('inf'):
-                    # text = basicfont.render(
-                    # str(graph.graph[node_name].g), True, (0, 0, 200), (255,
-                    # 255, 255))
-                    text = basicfont.render(
-                        str(graph.graph[node_name].g), True, (0, 0, 200))
+                    text = basicfont.render(str(graph.graph[node_name].g), True, (0, 0, 200))
                     textrect = text.get_rect()
-                    textrect.centerx = int(
-                        column * (GRID_WIDTH + MARGIN) + GRID_WIDTH / 2) + MARGIN
-                    textrect.centery = int(
-                        row * (GRID_HEIGHT + MARGIN) + GRID_HEIGHT / 2) + MARGIN
+                    textrect.centerx = int(column * (GRID_WIDTH_MARGIN) + GRID_WIDTH_by_2) + MARGIN
+                    textrect.centery = int(row * (GRID_HEIGHT_MARGIN) + GRID_HEIGHT_by_2) + MARGIN
                     screen.blit(text, textrect)
 
-        # fill in goal cell with RED
-        pygame.draw.rect(screen, RED, [(MARGIN + GRID_WIDTH) * s_goal_coords_px[0] + MARGIN,
-                                       (MARGIN + GRID_HEIGHT) * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
-        # print('drawing robot pos_coords_px: ', pos_coords_px)
-        # draw moving robot, based on pos_coords_px
-        robot_center = [int(s_current_coords_px[0] * (GRID_WIDTH + MARGIN) + GRID_WIDTH / 2) +
-                        MARGIN, int(s_current_coords_px[1] * (GRID_HEIGHT + MARGIN) + GRID_HEIGHT / 2) + MARGIN]
-        # pygame.draw.circle(screen, RED, robot_center, int(WIDTH / 2) - 2)
+        # Fill in goal cell with RED
+        pygame.draw.rect(screen, RED, [(GRID_WIDTH_MARGIN)  * s_goal_coords_px[0] + MARGIN,
+                                       (GRID_HEIGHT_MARGIN) * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+
+        # Draw moving robot, based on pos_coords_px
+        robot_center = [int(s_current_coords_px[0] * (GRID_WIDTH_MARGIN)  + GRID_WIDTH_by_2)  + MARGIN,
+                        int(s_current_coords_px[1] * (GRID_HEIGHT_MARGIN) + GRID_HEIGHT_by_2) + MARGIN]
+
         pygame.draw.circle(screen, GREEN, robot_center, int(GRID_WIDTH))
 
-        # draw robot viewing range
+        # Draw robot viewing range
         pygame.draw.rect(
             screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH + MARGIN),
                            robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT + MARGIN),
@@ -781,33 +756,25 @@ def follow_waypoints(scene):
 
         waypoints.pop(0)
 
-waypoints = []
-navigationStart = False
-
 def Navigation(thread_name, robot, target, scene):
     global navigationStart
     global runThreads
 
-    try:
-        # While the simulation is running, do
-        while sim.simxGetConnectionId(connection.clientID) != -1 and runThreads:  # sysCall_actuation()
-            if navigationStart:
-                # print('waypoints:')
-                # for waypoint in waypoints:
-                #     print(waypoint)
-
-                # Select Main Behavior:
-                try:
-                    if behavior == 0:
-                        follow_waypoints(scene)
-                    elif behavior == 1:
-                        goto_old(robot, target)  # FIXME:
-                    elif behavior == 2:
-                        braitenberg(robot, 2.0)
-                    else:
-                        raise ValueError("[ValueError] Invalid Behavior option!")
-                except ValueError:
-                    raise SystemError
+    # While the simulation is running, do
+    while sim.simxGetConnectionId(connection.clientID) != -1 and runThreads:  # sysCall_actuation()
+        if navigationStart:
+            try:
+                if behavior == 0:
+                    follow_waypoints(scene)
+                elif behavior == 1:
+                    goto_old(robot, target)  # FIXME:
+                elif behavior == 2:
+                    braitenberg(robot, 2.0)
+                else:
+                    raise ValueError("Invalid Behavior option!")
+            except ValueError:
+                runThreads = False
+                raise SystemError
 
 # ====== #
 #  Main  #
@@ -820,8 +787,8 @@ if __name__ == "__main__":
 
         # ----- Initialization ----- #
         #  Get Objects from Simulation  # sysCall_init()
-        robot = Pioneer()
-        target = Target()
+        robot = Pioneer('Pioneer_p3dx')
+        target = Target('GPS')
         scene = Scene()
 
         # ----- Threads (Tasks) ----- #

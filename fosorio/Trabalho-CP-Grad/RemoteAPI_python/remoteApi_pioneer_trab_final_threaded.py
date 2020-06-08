@@ -18,6 +18,7 @@ from modules.scene import Scene
 from modules.utils import *
 from modules import connection
 
+from skimage.morphology import dilation, square
 import numpy as np
 import pygame
 from d_star_lite.d_star_lite import initDStarLite, moveAndRescan
@@ -135,18 +136,10 @@ done = False
 # Used to manage how fast the screen updates
 clock = pygame.time.Clock()
 
-
-# ========= #
-#  Classes  #
-# ========= #
-
-
 # =========== #
 #  Functions  #
 # =========== #
-
-
-def goto_bug(robot, target):
+def goto_old(robot, target):
     global leftDetection
     global rightDetection
     global obstacleDetected
@@ -260,20 +253,201 @@ def goto_bug(robot, target):
         else:
             robot.stop()
 
+def reative_behavior1():
+    global leftDetection
+    global rightDetection
+    global obstacleDetected
+
+    if robot.check_around_is_free():
+        print("Status: Free, Straight to Target")
+        # leftDetection = True
+        # rightDetection = True
+        robot.forward(1.0)
+    else:
+        # GoForward or Follow Wall?
+        print("Status: Obstacle Around!")
+
+        print("Front:", robot.check_obstacle_front())
+        print("Left: ", robot.check_obstacle_left())
+        print("Right: ", robot.check_obstacle_right())
+        print("Rear: ", robot.check_obstacle_rear())
+        print("leftDetection: ", leftDetection)
+        print("rightDetection: ", rightDetection)
+        if robot.check_obstacle_front() and robot.check_obstacle_left() and leftDetection:
+            print("Status: Obstacle on Front&Left, Turning Right")
+
+            if not obstacleDetected:
+                time.sleep(5)
+                savedRz = robot.orientation.rz
+                obstacleDetected = True
+                leftDetection = False
+
+            robot.turnRight(0.5)
+        elif robot.check_obstacle_front() and robot.check_obstacle_right() and rightDetection:
+            print("Status: Obstacle on Front&Right, Turning Left")
+
+            if not obstacleDetected:
+                time.sleep(5)
+                savedRz = robot.orientation.rz
+                obstacleDetected = True
+                rightDetection = False
+
+            robot.turnLeft(0.5)
+        elif not robot.check_obstacle_front() and (
+                robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
+            if abs(robot.usensors.detect[1 - 1] - robot.usensors.detect[16 - 1]) > 0.1 or abs(
+                    robot.usensors.detect[8 - 1] - robot.usensors.detect[9 - 1]) > 0.1:
+                turningSpeed = 0.1
+                if robot.usensors.detect[1 - 1] > robot.usensors.detect[16 - 1]:
+                    print("Status: Aligning with Wall on Left, Turning Right")
+                    robot.turnRight(turningSpeed)
+                elif robot.usensors.detect[1 - 1] < robot.usensors.detect[16 - 1]:
+                    print("Status: Aligning with Wall on Left, Turning Left")
+                    robot.turnLeft(turningSpeed)
+                elif robot.usensors.detect[8 - 1] > robot.usensors.detect[9 - 1]:
+                    print("Status: Aligning with Wall on Right, Turning Left")
+                    robot.turnLeft(turningSpeed)
+                elif robot.usensors.detect[8 - 1] < robot.usensors.detect[9 - 1]:
+                    print("Status: Aligning with Wall on Right, Turning Right")
+                    robot.turnRight(turningSpeed)
+
+            else:
+                print("Status: Following Wall, Straight")
+                robot.forward(0.5)
+
+        elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
+            robot.rear(0.5)
+
+        elif robot.check_obstacle_front() and \
+                not robot.check_obstacle_left() and \
+                not robot.check_obstacle_right():
+            robot.turnLeft(0.5)
+        else:
+            print("Status: Nenhum dos casos!")
+            robot.forward(0.1)
+            robot.stop()
+
+def reative_behavior2():
+    if robot.check_around_is_free():
+        print("Status: Free, Straight to Target")
+        # leftDetection = True
+        # rightDetection = True
+        robot.forward(1.0)
+    else:
+        # GoForward or Follow Wall?
+        print("Status: Obstacle Around!")
+
+        print("Front:", robot.check_obstacle_front())
+        print("Left: ", robot.check_obstacle_left())
+        print("Right: ", robot.check_obstacle_right())
+        print("Rear: ", robot.check_obstacle_rear())
+        # print("leftDetection: ", leftDetection)
+        # print("rightDetection: ", rightDetection)
+        if robot.check_obstacle_front() and robot.check_obstacle_left():
+            print("Status: Obstacle on Front&Left, Turning Right")
+            robot.turnRight(0.5)
+
+        elif robot.check_obstacle_front() and robot.check_obstacle_right():
+            print("Status: Obstacle on Front&Right, Turning Left")
+            robot.turnLeft(0.5)
+
+        elif not robot.check_obstacle_front() and (
+                robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
+            if abs(robot.usensors.detect[1 - 1] - robot.usensors.detect[16 - 1]) > 0.1 or abs(
+                    robot.usensors.detect[8 - 1] - robot.usensors.detect[9 - 1]) > 0.1:
+                turningSpeed = 0.1
+                if robot.usensors.detect[1 - 1] > robot.usensors.detect[16 - 1]:
+                    print("Status: Aligning with Wall on Left, Turning Right")
+                    robot.turnRight(turningSpeed)
+                elif robot.usensors.detect[1 - 1] < robot.usensors.detect[16 - 1]:
+                    print("Status: Aligning with Wall on Left, Turning Left")
+                    robot.turnLeft(turningSpeed)
+                elif robot.usensors.detect[8 - 1] > robot.usensors.detect[9 - 1]:
+                    print("Status: Aligning with Wall on Right, Turning Left")
+                    robot.turnLeft(turningSpeed)
+                elif robot.usensors.detect[8 - 1] < robot.usensors.detect[9 - 1]:
+                    print("Status: Aligning with Wall on Right, Turning Right")
+                    robot.turnRight(turningSpeed)
+
+            else:
+                print("Status: Following Wall, Straight")
+                robot.forward(0.5)
+
+        elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
+            robot.rear(0.5)
+            time.sleep(1)
+
+        elif robot.check_obstacle_front() and \
+                not robot.check_obstacle_left() and \
+                not robot.check_obstacle_right():
+            robot.turnLeft(0.5)
+        else:
+            robot.stop()
+
+def reative_behavior3():
+    print("Status: Obstacle Around!")
+    if not robot.check_obstacle_front():
+        print("Status: PosAlignment, Going Forward")
+        robot.forward(1.0)
+    elif robot.check_obstacle_front():  # Too close!
+        if robot.check_obstacle_left():
+            print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear")
+            robot.turnRight(0.5)
+            time.sleep(0.05)
+            robot.rear(1.0)
+            time.sleep(0.05)
+        elif robot.check_obstacle_right():
+            print("Status: Avoiding Obstacle on Front-Right, Turning Left-Rear")
+            robot.turnLeft(0.5)
+            time.sleep(0.05)
+            robot.rear(1.0)
+            time.sleep(0.05)
+        else:
+            print("Status: Avoiding Obstacle, Going Rear")
+            robot.rear(1.0)
+    elif not robot.check_obstacle_front() and robot.check_obstacle_left(0.95):
+        print("Status: Avoiding Obstacle, Turning Right")
+        robot.turnRight(0.5)
+    elif not robot.check_obstacle_front() and robot.check_obstacle_right(0.95):
+        print("Status: Avoiding Obstacle, Turning Left")
+        robot.turnLeft(0.5)
+    else:
+        print("Status: Nenhum dos casos")
+        robot.stop()
 
 def goto(goal, px=False):
     if px:
         goal[0], goal[1] = coord_px2world(goal[0], goal[1])
 
     # ----- Sensors ----- #
+    # Get Robot Ultrasonic Readings
+    robot.readUltraSensors()
+
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
     robot.orientation.readData()
+
+    # Get Target Pose (Only Position)
+    target.position.readData()
 
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
     posDist, angDist = calculateDistances2(robot.position.list(), goal)
     angError = angDist - robot.orientation.rz
+
+    if debug:
+        robot.printUltraSensors()
+        robot.position.printData()
+        robot.orientation.printData()
+        robot.printMotorSpeeds()
+        target.position.printData()
+        print()
+
+    if debug:
+        print("Front:", robot.check_obstacle_front())
+        print("Left: ", robot.check_obstacle_left())
+        print("Right: ", robot.check_obstacle_right())
+        print("Rear: ", robot.check_obstacle_rear())
 
     if debug:
         print("posDist: ", posDist)
@@ -283,20 +457,31 @@ def goto(goal, px=False):
         print()
 
     # AngAlignment or GoForward?
-    if abs(angError) > angErrorTolerance and robot.check_around_is_free():
+    if abs(angError) > angErrorTolerance:
         if angError > 0:  # Positive
-            print("Status: AngAlignment, Turning Left")
-            # robot.turnLeft(abs(angError))
-            robot.turnLeft(0.25)
+            if not robot.check_obstacle_left():
+                print("Status: AngAlignment, Turning Left")
+                # robot.turnLeft(abs(angError))
+                robot.turnLeft(0.25)
+            else:
+                print("Status: AngAlignment, CAN'T Turning Left!")
+                robot.stop()
         else:  # Negative
-            print("Status: AngAlignment, Turning Right")
-            # robot.turnRight(abs(angError))
-            robot.turnRight(0.25)
+            if not robot.check_obstacle_right():
+                print("Status: AngAlignment, Turning Right")
+                # robot.turnRight(abs(angError))
+                robot.turnRight(0.25)
+            else:
+                print("Status: AngAlignment, CAN'T Turning Right!")
+                robot.stop()
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
             robot.forward(1.0)
             # braitenberg(robot, 1.0)
+            # reative_behavior1()
+            # reative_behavior2()
+            # reative_behavior3()
         else:
             robot.stop()
             return True
@@ -580,12 +765,22 @@ def Planning(thread_name, robot, target, scene):
         pygame.display.flip()
 
 
+def follow_waypoints(scene):
+    global waypoints
+
+    if len(waypoints) != 0:
+        waypoint = waypoints[0]
+        scene.setWaypointPosition(waypoint)
+
+        while goto(waypoint) is False:
+            pass
+
+        waypoints.pop(0)
+
 waypoints = []
 navigationStart = False
 
-
-def Navigation(thread_name, robot, target):
-    global waypoints
+def Navigation(thread_name, robot, target, scene):
     global navigationStart
 
     try:
@@ -599,31 +794,15 @@ def Navigation(thread_name, robot, target):
                 # Select Main Behavior:
                 try:
                     if behavior == 0:
-                        while len(waypoints) != 0:
-                            waypoint = waypoints[0]
-
-                            ret = goto(waypoint)
-                            scene.setWaypointPosition(waypoint)
-
-                            if ret:
-                                waypoints.pop(0)
-
+                        follow_waypoints(scene)
                     elif behavior == 1:
-                        goto_bug(robot, target)  # FIXME:
+                        goto_old(robot, target)  # FIXME:
                     elif behavior == 2:
                         braitenberg(robot, 2.0)
                     else:
                         raise ValueError("[ValueError] Invalid Behavior option!")
                 except ValueError:
                     raise SystemError
-
-                if debug:
-                    robot.printUltraSensors()
-                    robot.position.printData()
-                    robot.orientation.printData()
-                    robot.printMotorSpeeds()
-                    target.position.printData()
-                    print()
 
     except KeyboardInterrupt:  # sysCall_cleanup() # FIXME: Doesn't work
         print("Setting 0.0 velocity to motors, before disconnecting...")
@@ -649,7 +828,7 @@ if __name__ == "__main__":
         # thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
         # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
         thread3 = Thread(target=Planning, args=("Thread-3", robot, target, scene))
-        thread4 = Thread(target=Navigation, args=("Thread-4", robot, target))
+        thread4 = Thread(target=Navigation, args=("Thread-4", robot, target, scene))
 
         # thread1.start()
         # print("[Thread-1] 'RobotStatus' started!")

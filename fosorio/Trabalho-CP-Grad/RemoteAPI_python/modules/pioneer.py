@@ -113,51 +113,45 @@ class Pioneer:
     def stop(self):
         self.setSpeeds(0.0, 0.0)
 
-    def check_around_is_free(self):
-        detectValue = 0.5
-
+    def check_around_is_free(self, detectionValue=0.5):
         for i in range(16):
-            if self.usensors.detect[i] >= detectValue:
+            if self.usensors.detect[i] >= detectionValue:
                 return False
 
         return True
 
-    def check_obstacle_left(self):
-        detectValue = 0.5
+    def check_obstacle_left(self, detectionValue=0.5):
         ids = [1, 2, 15, 16]
 
         for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectionValue:
                 return True
 
         return False
 
-    def check_obstacle_front(self):
-        detectValue = 0.5
+    def check_obstacle_front(self, detectionValue=0.5):
         ids = [3, 4, 5, 6]
 
         for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectionValue:
                 return True
 
         return False
 
-    def check_obstacle_right(self):
-        detectValue = 0.5
+    def check_obstacle_right(self, detectionValue=0.5):
         ids = [7, 8, 9, 10]
 
         for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectionValue:
                 return True
 
         return False
 
-    def check_obstacle_rear(self):
-        detectValue = 0.5
+    def check_obstacle_rear(self, detectionValue=0.5):
         ids = [11, 12, 13, 14]
 
         for id in ids:
-            if self.usensors.detect[id - 1] >= detectValue:
+            if self.usensors.detect[id - 1] >= detectionValue:
                 return True
 
         return False

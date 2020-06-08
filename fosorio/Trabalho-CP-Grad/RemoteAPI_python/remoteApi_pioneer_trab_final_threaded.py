@@ -31,11 +31,17 @@ from modules.target import Target
 #  Global Params  #
 # =============== #
 # Select Main Behavior:
-behavior = 0
+behavior = 2
+
+if behavior == 0:
+    doPlanning = True
+else:
+    doPlanning = False
 
 showPose = False
 saveFile = False
 debug = True
+runThreads = True
 
 connection.init()
 
@@ -74,67 +80,68 @@ braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0
 braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # [Pygame] Variables Initialization
-# Define some colors
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-GRAY1 = (145, 145, 102)
-GRAY2 = (77, 77, 51)
-BLUE = (0, 0, 80)
+if behavior == 0:
+    # Define some colors
+    BLACK = (0, 0, 0)
+    WHITE = (255, 255, 255)
+    GREEN = (0, 255, 0)
+    RED = (255, 0, 0)
+    GRAY1 = (145, 145, 102)
+    GRAY2 = (77, 77, 51)
+    BLUE = (0, 0, 80)
 
-colors = {
-    0: WHITE,
-    1: GREEN,
-    -1: GRAY1,
-    -2: GRAY2
-}
+    colors = {
+        0: WHITE,
+        1: GREEN,
+        -1: GRAY1,
+        -2: GRAY2
+    }
 
-# This sets the WIDTH and HEIGHT of each grid location
-if image_resolution[0] == 128:
-    GRID_HEIGHT, GRID_WIDTH = 7, 7
-elif image_resolution[0] == 256:
-    GRID_HEIGHT, GRID_WIDTH = 3, 3
-elif image_resolution[0] == 512:
-    GRID_HEIGHT, GRID_WIDTH = 2, 2
+    # This sets the WIDTH and HEIGHT of each grid location
+    if image_resolution[0] == 128:
+        GRID_HEIGHT, GRID_WIDTH = 7, 7
+    elif image_resolution[0] == 256:
+        GRID_HEIGHT, GRID_WIDTH = 3, 3
+    elif image_resolution[0] == 512:
+        GRID_HEIGHT, GRID_WIDTH = 2, 2
 
-# This sets the margin between each cell
-MARGIN = 0
+    # This sets the margin between each cell
+    MARGIN = 0
 
-# Create a 2 dimensional array. A two dimensional
-# array is simply a list of lists.
-grid = []
-for row in range(10):
-    # Add an empty array that will hold each cell
-    # in this row
-    grid.append([])
-    for column in range(10):
-        grid[row].append(0)  # Append a cell
+    # Create a 2 dimensional array. A two dimensional
+    # array is simply a list of lists.
+    grid = []
+    for row in range(10):
+        # Add an empty array that will hold each cell
+        # in this row
+        grid.append([])
+        for column in range(10):
+            grid[row].append(0)  # Append a cell
 
-# Set row 1, cell 5 to one. (Remember rows and
-# column numbers start at zero.)
-grid[1][5] = 1
+    # Set row 1, cell 5 to one. (Remember rows and
+    # column numbers start at zero.)
+    grid[1][5] = 1
 
-# Initialize pygame
-pygame.init()
+    # Initialize pygame
+    pygame.init()
 
-X_DIM = image_resolution[0]
-Y_DIM = image_resolution[1]
-VIEWING_RANGE = 3
+    X_DIM = image_resolution[0]
+    Y_DIM = image_resolution[1]
+    VIEWING_RANGE = 3
 
-# Set the HEIGHT and WIDTH of the screen
-WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
-               (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
-screen = pygame.display.set_mode(WINDOW_SIZE)
+    # Set the HEIGHT and WIDTH of the screen
+    WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
+                   (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
+    screen = pygame.display.set_mode(WINDOW_SIZE)
 
-# Set title of screen
-pygame.display.set_caption("D* Lite Path Planning")
+    # Set title of screen
+    pygame.display.set_caption("D* Lite Path Planning")
 
-# Loop until the user clicks the close button.
-done = False
+    # Loop until the user clicks the close button.
+    done = False
 
-# Used to manage how fast the screen updates
-clock = pygame.time.Clock()
+    # Used to manage how fast the screen updates
+    clock = pygame.time.Clock()
 
 # =========== #
 #  Functions  #
@@ -146,7 +153,7 @@ def goto_old(robot, target):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.readUltraSensors()
+    robot.usensors.readUltraSensors()
 
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
@@ -421,7 +428,7 @@ def goto(goal, px=False):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.readUltraSensors()
+    robot.usensors.readUltraSensors()
 
     # Get Robot Pose (Position & Orientation)
     robot.position.readData()
@@ -497,7 +504,7 @@ def braitenberg(robot, v0):
 
     # ----- Sensors ----- #
     # Get Robot Ultrasonic Readings
-    robot.readUltraSensors()
+    robot.usensors.readUltraSensors()
 
     # ----- Actuators ----- #
     # Update Motors Speeds based on sensors readings
@@ -534,7 +541,7 @@ def RobotStatus(thread_name, robot):
     # While the simulation is running, do
     while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Robot Ultrasonic Readings
-        robot.readUltraSensors()
+        robot.usensors.readUltraSensors()
 
         # Get Robot Pose (Position & Orientation)
         robot.position.readData()
@@ -556,6 +563,7 @@ def Planning(thread_name, robot, target, scene):
     global firstTime
     global waypoints
     global navigationStart
+    global runThreads
 
     if firstTime:
         # Links Simulation coordinates to Graph Coordinates
@@ -600,7 +608,7 @@ def Planning(thread_name, robot, target, scene):
         print("s_goal:", s_goal, "\ts_goal_coords_px:", coord_px2world(s_goal_coords_px[0], s_goal_coords_px[1]))
 
     # While the simulation is running, do
-    while not done and (sim.simxGetConnectionId(connection.clientID) != -1):
+    while not done and (sim.simxGetConnectionId(connection.clientID) != -1) and runThreads:
         # =================== #
         #  MapSensor Handler  #
         # =================== #
@@ -653,10 +661,6 @@ def Planning(thread_name, robot, target, scene):
 
         except ValueError:
             pass
-
-        except KeyboardInterrupt:  # FIXME: Doesn't work
-            print("Setting 0.0 velocity to motors, before disconnecting...")
-            robot.stop()
 
         # ======== #
         #  Pygame  #
@@ -782,10 +786,11 @@ navigationStart = False
 
 def Navigation(thread_name, robot, target, scene):
     global navigationStart
+    global runThreads
 
     try:
         # While the simulation is running, do
-        while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_actuation()
+        while sim.simxGetConnectionId(connection.clientID) != -1 and runThreads:  # sysCall_actuation()
             if navigationStart:
                 # print('waypoints:')
                 # for waypoint in waypoints:
@@ -804,11 +809,6 @@ def Navigation(thread_name, robot, target, scene):
                 except ValueError:
                     raise SystemError
 
-    except KeyboardInterrupt:  # sysCall_cleanup() # FIXME: Doesn't work
-        print("Setting 0.0 velocity to motors, before disconnecting...")
-        robot.stop()
-
-
 # ====== #
 #  Main  #
 # ====== #
@@ -826,26 +826,37 @@ if __name__ == "__main__":
 
         # ----- Threads (Tasks) ----- #
         # thread1 = Thread(target=RobotStatus,  args=("Thread-1", robot))
-        # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
-        thread3 = Thread(target=Planning, args=("Thread-3", robot, target, scene))
-        thread4 = Thread(target=Navigation, args=("Thread-4", robot, target, scene))
-
         # thread1.start()
         # print("[Thread-1] 'RobotStatus' started!")
+
+        # thread2 = Thread(target=TargetStatus, args=("Thread-2", target))
         # thread2.start()
         # print("[Thread-2] 'TargetStatus' started!")
 
-        thread3.start()
-        print("[Thread-3] 'Planning' started!")
+        if doPlanning:
+            thread3 = Thread(target=Planning, args=("Thread-3", robot, target, scene))
+            thread3.start()
+            print("[Thread-3] 'Planning' started!")
+        else:
+            navigationStart = True
+
+        thread4 = Thread(target=Navigation, args=("Thread-4", robot, target, scene))
         thread4.start()
         print("[Thread-4] 'Navigation' started!")
 
         # ----- Loop ----- #
         while sim.simxGetConnectionId(connection.clientID) != -1:  # Actuation
-            # thread1.join()
-            # thread2.join()
-            thread3.join()
-            thread4.join()
+            try:
+                # thread1.join()
+                # thread2.join()
+                if doPlanning:
+                    thread3.join()
+                thread4.join()
+            except KeyboardInterrupt:   # sysCall_cleanup()
+                runThreads = False
+                print("Setting 0.0 velocity to motors, before disconnecting...")
+                robot.stop()
+                break
 
         # ----- Close Connection ----- #
         # Before closing the connection to CoppeliaSim, make sure that the last command sent out had time to arrive.

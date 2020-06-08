@@ -12,10 +12,16 @@ from modules.gps import GPS
 #  Class  #
 # ======= #
 class Actuator:
-    def __init__(self):
-        self.Handle = 0
-        self.vel = 0.0
+    def __init__(self, objName):
+        self.objName = objName
+        self.Handle = None
+        self.speed = 0.0
 
+        _, self.Handle = getObjectFromSim(self.objName)
+
+    def setSpeed(self, speed):
+        self.speed = speed
+        sim.simxSetJointTargetVelocity(connection.clientID, self.Handle, self.speed, sim.simx_opmode_streaming)
 
 class UltraSensors:
     def __init__(self, noDetectionDist, maxDetectionDist):
@@ -29,67 +35,64 @@ class UltraSensors:
         # Status
         self.detect = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-
-class Pioneer:
-    def __init__(self):
-        self.name = 'robot'
-        self.leftMotor = Actuator()
-        self.rightMotor = Actuator()
-        self.usensors = UltraSensors(0.5, 0.2)
-        self.position = GPS(self.name)
-        self.orientation = Compass(self.name)
-
-        # Motors Initialization (remoteApi)
-        _, self.leftMotor.Handle = getObjectFromSim('Pioneer_p3dx_leftMotor')
-        _, self.rightMotor.Handle = getObjectFromSim('Pioneer_p3dx_rightMotor')
-
-        # Sensors Initialization (remoteApi)
         for i in range(16):
-            self.usensors.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
-            ret, self.usensors.sensorHandle[i] = sim.simxGetObjectHandle(connection.clientID,
-                                                                         self.usensors.sensorName[i],
+            self.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
+            ret, self.sensorHandle[i] = sim.simxGetObjectHandle(connection.clientID,
+                                                                         self.sensorName[i],
                                                                          sim.simx_opmode_oneshot_wait)
 
             if ret != 0:
-                print("sensorHandle '{}' not found!".format(self.usensors.sensorName[i]))
+                print("sensorHandle '{}' not found!".format(self.sensorName[i]))
             else:
-                print("Linked to the '{}' objHandle!".format(self.usensors.sensorName[i]))
+                print("Linked to the '{}' objHandle!".format(self.sensorName[i]))
                 ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
                     connection.clientID,
-                    self.usensors.sensorHandle[i],
+                    self.sensorHandle[i],
                     sim.simx_opmode_streaming)  # Mandatory First Read
 
-        self.position.readData()
-        self.orientation.readData()
 
     def readUltraSensors(self):
         for i in range(16):
             ret, state, coord, detectedObjectHandle, detectedSurfaceNormalVector = sim.simxReadProximitySensor(
-                connection.clientID, self.usensors.sensorHandle[i], sim.simx_opmode_buffer)
+                connection.clientID, self.sensorHandle[i], sim.simx_opmode_buffer)
             if ret == 0:
                 dist = coord[2]  # z-axis
-                if state > 0 and dist < self.usensors.noDetectionDist:
-                    if dist < self.usensors.maxDetectionDist:
-                        dist = self.usensors.maxDetectionDist
+                if state > 0 and dist < self.noDetectionDist:
+                    if dist < self.maxDetectionDist:
+                        dist = self.maxDetectionDist
 
-                    self.usensors.detect[i] = 1 - ((dist - self.usensors.maxDetectionDist) /
-                                                   (self.usensors.noDetectionDist - self.usensors.maxDetectionDist))
+                    self.detect[i] = 1 - ((dist - self.maxDetectionDist) /
+                                                   (self.noDetectionDist - self.maxDetectionDist))
                 else:
-                    self.usensors.detect[i] = 0
+                    self.detect[i] = 0
             else:
-                self.usensors.detect[i] = 0
+                self.detect[i] = 0
+
+class Pioneer:
+    def __init__(self):
+        self.name = 'robot'
+        self.position = GPS(self.name)
+        self.orientation = Compass(self.name)
+
+        # Motors Initialization (remoteApi)
+        self.leftMotor = Actuator('Pioneer_p3dx_leftMotor')
+        self.rightMotor = Actuator('Pioneer_p3dx_rightMotor')
+
+        # Sensors Initialization (remoteApi)
+        self.usensors = UltraSensors(0.5, 0.2)
+
+        self.usensors.readUltraSensors()
+        self.position.readData()
+        self.orientation.readData()
+        self.stop()
 
     def setSpeeds(self, vLeft, vRight):
-        self.leftMotor.vel = vLeft
-        self.rightMotor.vel = vRight
+        self.leftMotor.setSpeed(vLeft)
+        self.rightMotor.setSpeed(vRight)
 
-        sim.simxSetJointTargetVelocity(connection.clientID, self.leftMotor.Handle, self.leftMotor.vel,
-                                       sim.simx_opmode_streaming)
-        sim.simxSetJointTargetVelocity(connection.clientID, self.rightMotor.Handle, self.rightMotor.vel,
-                                       sim.simx_opmode_streaming)
-
+    # ----- Status ----- #
     def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format(self.name, self.leftMotor.vel, self.rightMotor.vel))
+        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format(self.name, self.leftMotor.speed, self.rightMotor.speed))
 
     def printUltraSensors(self):
         msg = "[{}] ".format(self.name)
@@ -98,6 +101,7 @@ class Pioneer:
 
         print(msg)
 
+    # ----- Basic Commands ----- #
     def forward(self, speed):
         self.setSpeeds(speed, speed)
 
@@ -113,6 +117,7 @@ class Pioneer:
     def stop(self):
         self.setSpeeds(0.0, 0.0)
 
+    # ----- Obstacle Awareness ----- #
     def check_around_is_free(self, detectionValue=0.5):
         for i in range(16):
             if self.usensors.detect[i] >= detectionValue:

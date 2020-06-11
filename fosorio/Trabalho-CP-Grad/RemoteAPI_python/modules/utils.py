@@ -5,8 +5,10 @@ from vrep import sim
 from modules import connection
 import math
 
+
 def print_status_bar(message):
     sim.simxAddStatusbarMessage(connection.clientID, message, sim.simx_opmode_oneshot)
+
 
 def getObjectFromSim(name):
     ret, obj = sim.simxGetObjectHandle(connection.clientID, name, sim.simx_opmode_oneshot_wait)
@@ -25,11 +27,14 @@ def calculateDistances(p1, p2):
 
     return posDist, angDist
 
+
 def stateNameToCoords(name):
     return [int(name.split('x')[1].split('y')[0]), int(name.split('x')[1].split('y')[1])]
 
+
 def rad2deg(value):
-    return value*(180/math.pi)
+    return value * (180 / math.pi)
+
 
 def deg2rad(value):
-    return value*(math.pi/180)
+    return value * (math.pi / 180)

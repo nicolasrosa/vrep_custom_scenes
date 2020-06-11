@@ -114,13 +114,13 @@ if doPlanning:
     X_DIM = image_resolution[0]
     Y_DIM = image_resolution[1]
     MARGIN = 0  # This sets the margin between each cell
-    WINDOW_SIZE = [(GRID_WIDTH + MARGIN) * X_DIM + MARGIN,
-                   (GRID_HEIGHT + MARGIN) * Y_DIM + MARGIN]
-
     GRID_WIDTH_MARGIN = GRID_WIDTH + MARGIN
     GRID_HEIGHT_MARGIN = GRID_HEIGHT + MARGIN
+    WINDOW_SIZE = [(GRID_WIDTH_MARGIN) * X_DIM + MARGIN,
+                   (GRID_HEIGHT_MARGIN) * Y_DIM + MARGIN]
+
     GRID_WIDTH_by_2 = GRID_WIDTH / 2
-    GRID_HEIGHT_by_2 = GRID_HEIGHT /2
+    GRID_HEIGHT_by_2 = GRID_HEIGHT / 2
 
     VIEWING_RANGE = 3
 
@@ -135,6 +135,7 @@ if doPlanning:
 
     # Used to manage how fast the screen updates
     clock = pygame.time.Clock()
+
 
 # =========== #
 #  Functions  #
@@ -264,6 +265,7 @@ def goto_old(robot, target):
         else:
             robot.stop()
 
+
 def reative_behavior1():
     global leftDetection
     global rightDetection
@@ -338,6 +340,7 @@ def reative_behavior1():
             robot.forward(0.1)
             robot.stop()
 
+
 def reative_behavior2():
     if robot.check_around_is_free():
         print("Status: Free, Straight to Target")
@@ -394,6 +397,7 @@ def reative_behavior2():
             robot.turnLeft(0.5)
         else:
             robot.stop()
+
 
 def goto_temp():
     global debug1, debug2, debug3
@@ -454,7 +458,8 @@ def goto_temp():
         print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+    if not (
+            angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -474,6 +479,7 @@ def goto_temp():
         robot.stop()
 
     print('---')
+
 
 def goto(goal, px=False):
     global debug1, debug2, debug3
@@ -498,12 +504,12 @@ def goto(goal, px=False):
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
     # posDist, angDist = calculateDistances(robot.position, goal)
-    posDist, angDist = calculateDistances(robot.position_sim, goal) # FIXME: Voltar para os dados com ruídos
+    posDist, angDist = calculateDistances(robot.position_sim, goal)  # FIXME: Voltar para os dados com ruídos
     if angDist < 0:
-        angDist += 2*math.pi
+        angDist += 2 * math.pi
 
     if robot.orientation.rz < 0:
-        robot.orientation.rz += 2*math.pi
+        robot.orientation.rz += 2 * math.pi
 
     angError = angDist - robot.orientation.rz
 
@@ -533,7 +539,8 @@ def goto(goal, px=False):
         print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+    if not (
+            angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -576,6 +583,8 @@ def goto(goal, px=False):
                         time.sleep(0.05)
                     elif robot.check_obstacle_front(0.9):  # Too close!
                         print("Status: Avoiding Obstacle, Going Rear", flush=True)
+                        robot.turnLeft(1.0)
+                        time.sleep(0.05)
                         robot.rear(1.0)
                 elif robot.check_obstacle_rear(0.5):
                     print("Status: Avoiding Obstacle, Going Forward", flush=True)
@@ -745,7 +754,7 @@ def Planning(thread_name, robot, target, scene):
             # plt.draw()
             # plt.pause(1e-4)
 
-            image_grid_morph = (image_grid-256).astype(np.int8)  # (resX, resY, 1), data: [-1, 0]
+            image_grid_morph = (image_grid - 256).astype(np.int8)  # (resX, resY, 1), data: [-1, 0]
 
             # Makes the detected obstacles by the mapSensor to be considered in the Pygame's graph
             graph.cells = image_grid_morph.tolist()
@@ -823,8 +832,8 @@ def Planning(thread_name, robot, target, scene):
                 # User clicks the mouse. Get the position
                 pos = pygame.mouse.get_pos()
                 # Change the x/y screen coordinates to grid coordinates
-                column = pos[0] // (GRID_WIDTH_MARGIN)
-                row = pos[1] // (GRID_HEIGHT_MARGIN)
+                column = pos[0] // GRID_WIDTH_MARGIN
+                row = pos[1] // GRID_HEIGHT_MARGIN
                 print(column, row)
                 # Set that location to one
                 if graph.cells[row][column] == 0:
@@ -837,31 +846,31 @@ def Planning(thread_name, robot, target, scene):
         for row in range(Y_DIM):
             for column in range(X_DIM):
                 pygame.draw.rect(screen, colors[graph.cells[row][column]],
-                                 [(GRID_WIDTH_MARGIN) * column + MARGIN,
-                                  (GRID_HEIGHT_MARGIN) * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+                                 [GRID_WIDTH_MARGIN * column + MARGIN,
+                                  GRID_HEIGHT_MARGIN * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
                 node_name = 'x' + str(column) + 'y' + str(row)
                 if graph.graph[node_name].g != float('inf'):
                     text = basicfont.render(str(graph.graph[node_name].g), True, (0, 0, 200))
                     textrect = text.get_rect()
-                    textrect.centerx = int(column * (GRID_WIDTH_MARGIN) + GRID_WIDTH_by_2) + MARGIN
-                    textrect.centery = int(row * (GRID_HEIGHT_MARGIN) + GRID_HEIGHT_by_2) + MARGIN
+                    textrect.centerx = int(column * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN
+                    textrect.centery = int(row * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN
                     screen.blit(text, textrect)
 
         # Fill in goal cell with RED
-        pygame.draw.rect(screen, RED, [(GRID_WIDTH_MARGIN)  * s_goal_coords_px[0] + MARGIN,
-                                       (GRID_HEIGHT_MARGIN) * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+        pygame.draw.rect(screen, RED, [GRID_WIDTH_MARGIN * s_goal_coords_px[0] + MARGIN,
+                                       GRID_HEIGHT_MARGIN * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
 
         # Draw moving robot, based on pos_coords_px
-        robot_center = [int(s_current_coords_px[0] * (GRID_WIDTH_MARGIN)  + GRID_WIDTH_by_2)  + MARGIN,
-                        int(s_current_coords_px[1] * (GRID_HEIGHT_MARGIN) + GRID_HEIGHT_by_2) + MARGIN]
+        robot_center = [int(s_current_coords_px[0] * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN,
+                        int(s_current_coords_px[1] * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN]
 
         pygame.draw.circle(screen, GREEN, robot_center, int(GRID_WIDTH))
 
         # Draw robot viewing range
         pygame.draw.rect(
-            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH + MARGIN),
-                           robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT + MARGIN),
-                           2 * VIEWING_RANGE * (GRID_WIDTH + MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT + MARGIN)], 2)
+            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH_MARGIN),
+                           robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT_MARGIN),
+                           2 * VIEWING_RANGE * (GRID_WIDTH_MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT_MARGIN)], 2)
 
         # Limit to 60 frames per second
         clock.tick(20)
@@ -901,6 +910,7 @@ def follow_waypoints(scene):
 
         waypoints.pop(0)
 
+
 def Navigation(thread_name, robot, target, scene):
     global navigationStart
     global runThreads
@@ -923,6 +933,7 @@ def Navigation(thread_name, robot, target, scene):
             except ValueError:
                 runThreads = False
                 raise SystemError
+
 
 # ====== #
 #  Main  #
@@ -967,7 +978,7 @@ if __name__ == "__main__":
                 if doPlanning:
                     thread3.join()
                 thread4.join()
-            except KeyboardInterrupt:   # sysCall_cleanup()
+            except KeyboardInterrupt:  # sysCall_cleanup()
                 runThreads = False
                 print("Setting 0.0 velocity to motors, before disconnecting...")
                 robot.stop()

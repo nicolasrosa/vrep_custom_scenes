@@ -9,6 +9,7 @@ from modules.gps import GPS
 from modules.coord import Coord
 from modules.angeu import Angeu
 
+
 # ======= #
 #  Class  #
 # ======= #
@@ -23,6 +24,7 @@ class Actuator:
     def setSpeed(self, speed):
         self.speed = speed
         sim.simxSetJointTargetVelocity(connection.clientID, self.Handle, self.speed, sim.simx_opmode_streaming)
+
 
 class UltraSensors:
     def __init__(self, noDetectionDist, maxDetectionDist):
@@ -39,8 +41,8 @@ class UltraSensors:
         for i in range(16):
             self.sensorName[i] = "Pioneer_p3dx_ultrasonicSensor{}".format(i + 1)
             ret, self.sensorHandle[i] = sim.simxGetObjectHandle(connection.clientID,
-                                                                         self.sensorName[i],
-                                                                         sim.simx_opmode_oneshot_wait)
+                                                                self.sensorName[i],
+                                                                sim.simx_opmode_oneshot_wait)
 
             if ret != 0:
                 print("sensorHandle '{}' not found!".format(self.sensorName[i]))
@@ -50,7 +52,6 @@ class UltraSensors:
                     connection.clientID,
                     self.sensorHandle[i],
                     sim.simx_opmode_streaming)  # Mandatory First Read
-
 
     def readData(self):
         for i in range(16):
@@ -62,12 +63,12 @@ class UltraSensors:
                     if dist < self.maxDetectionDist:
                         dist = self.maxDetectionDist
 
-                    self.detect[i] = 1 - ((dist - self.maxDetectionDist) /
-                                                   (self.noDetectionDist - self.maxDetectionDist))
+                    self.detect[i] = 1 - ((dist - self.maxDetectionDist)/(self.noDetectionDist - self.maxDetectionDist))
                 else:
                     self.detect[i] = 0
             else:
                 self.detect[i] = 0
+
 
 class Pioneer:
     def __init__(self, objName):
@@ -83,7 +84,8 @@ class Pioneer:
         self.position = GPS('robot')
         self.orientation = Compass('robot')
         _, position_sim = sim.simxGetObjectPosition(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
-        _, orientation_sim = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
+        _, orientation_sim = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1,
+                                                          sim.simx_opmode_streaming)
         self.position_sim = Coord(position_sim[0], position_sim[1], position_sim[2])
         self.orientation_sim = Angeu(orientation_sim[0], orientation_sim[1], orientation_sim[2])
 
@@ -106,7 +108,8 @@ class Pioneer:
         self.orientation_sim.rz = orientation_sim[2]
 
     def printMotorSpeeds(self):
-        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed), flush=True)
+        print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed),
+              flush=True)
 
     def printUltraSensors(self):
         msg = "[{}] ".format('robot')

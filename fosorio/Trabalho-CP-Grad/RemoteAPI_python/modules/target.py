@@ -4,6 +4,7 @@
 from modules.gps import GPS
 from .utils import getObjectFromSim
 
+
 # ======= #
 #  Class  #
 # ======= #

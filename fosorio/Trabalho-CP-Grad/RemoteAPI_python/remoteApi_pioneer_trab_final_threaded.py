@@ -27,7 +27,7 @@ from modules.utils import stateNameToCoords
 from modules.pioneer import Pioneer
 from modules.target import Target
 import matplotlib.pyplot as plt
-
+from modules.coord import Coord
 
 # =============== #
 #  Global Params  #
@@ -73,7 +73,7 @@ map_grid_resY = scene_size / image_resolution[1]
 # [goto] Variables Initialization
 # posErrorTolerance = 0.3
 # angErrorTolerance = 0.3
-posErrorTolerance = 0.5
+posErrorTolerance = 0.4
 angErrorTolerance = 0.6
 obstacleDetected = False
 leftDetection = True
@@ -176,6 +176,18 @@ def goto_old(robot, target):
             print("Status: AngAlignment, Turning Right")
             # turnRight(math.abs(angError))
             robot.turnRight(0.5)
+    # if robot.check_around_is_free():
+    #     if angError > 0 and angError > angErrorTolerance:  # Positive
+    #         print("Status: AngAlignment, Turning Left")
+    #         # turnLeft(math.abs(angError))
+    #         robot.turnLeft(0.5)
+    #     elif angError < 0 and angError < 2*math.pi - angErrorTolerance:  # Negative
+    #         print("Status: AngAlignment, Turning Right")
+    #         # turnRight(math.abs(angError))
+    #         robot.turnRight(0.5)
+    #     else:
+    #         print("Status: Nenhum dos casos 1")
+    #         robot.stop()
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
@@ -383,6 +395,85 @@ def reative_behavior2():
         else:
             robot.stop()
 
+def goto_temp():
+    global debug1, debug2, debug3
+    goal = Coord(0.0, 0.0, 0.0)
+
+    # ----- Sensors ----- #
+    # Get Robot Ultrasonic Readings
+    robot.usensors.readData()
+
+    # Get Robot Pose (Position & Orientation)
+    robot.position.readData()
+    robot.orientation.readData()
+
+    robot.getSimPosition()
+    robot.getSimOrientation()
+
+    # Get Target Pose (Only Position)
+    target.position.readData()
+
+    # ----- Actuators ----- #
+    # Compute Position/Angle Distance from 'Robot' to 'Target'
+    # posDist, angDist = calculateDistances(robot.position, goal)
+    posDist, angDist = calculateDistances(robot.position_sim, goal)  # FIXME: Voltar para os dados com ruídos
+    if angDist < 0:
+        angDist += 2 * math.pi
+
+    if robot.orientation.rz < 0:
+        robot.orientation.rz += 2 * math.pi
+
+    angError = angDist - robot.orientation.rz
+
+    # if angError < 0:
+    #     angError += math.pi
+
+    # if debug1:
+    #     robot.printUltraSensors()
+    #     robot.position.printData()
+    #     robot.orientation.printData()
+    #     robot.printMotorSpeeds()
+    #     target.position.printData()
+
+    if debug1:
+        robot.position_sim.printData()
+        robot.orientation_sim.printData()
+        goal.printData()
+        target.position.printData()
+
+    if debug2:
+        print("Front:", robot.check_obstacle_front())
+        print("Left: ", robot.check_obstacle_left())
+        print("Right: ", robot.check_obstacle_right())
+        print("Rear: ", robot.check_obstacle_rear())
+
+    if debug3:
+        print("posDist: ", posDist)
+        print("angDist: {} ({}°)".format(angDist, rad2deg(angDist)))
+        print("Rz: {} ({}°)".format(robot.orientation.rz, rad2deg(robot.orientation.rz)))
+        print("angError: {} ({}°)".format(angError, rad2deg(angError)))
+
+    # AngAlignment or GoForward?
+    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+        if angError > 0:  # Positive
+            if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
+                print("Status: AngAlignment, Turning Right1", flush=True)
+                robot.turnRight(0.25)
+            else:
+                print("Status: AngAlignment, Turning Left2", flush=True)
+                robot.turnLeft(0.25)
+        else:  # Negative
+            if angDist < deg2rad(90) and robot.orientation.rz > deg2rad(225):  # First Quad
+                print("Status: AngAlignment, Turning Left1", flush=True)
+                robot.turnLeft(0.25)
+            else:
+                print("Status: AngAlignment, Turning Right2", flush=True)
+                robot.turnRight(0.25)
+    else:
+        print("Status: Do Nothing!")
+        robot.stop()
+
+    print('---')
 
 def goto(goal, px=False):
     global debug1, debug2, debug3
@@ -398,19 +489,35 @@ def goto(goal, px=False):
     robot.position.readData()
     robot.orientation.readData()
 
+    robot.getSimPosition()
+    robot.getSimOrientation()
+
     # Get Target Pose (Only Position)
     target.position.readData()
 
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
-    posDist, angDist = calculateDistances2(robot.position.list(), goal)
+    # posDist, angDist = calculateDistances(robot.position, goal)
+    posDist, angDist = calculateDistances(robot.position_sim, goal) # FIXME: Voltar para os dados com ruídos
+    if angDist < 0:
+        angDist += 2*math.pi
+
+    if robot.orientation.rz < 0:
+        robot.orientation.rz += 2*math.pi
+
     angError = angDist - robot.orientation.rz
 
+    # if debug1:
+    #     robot.printUltraSensors()
+    #     robot.position.printData()
+    #     robot.orientation.printData()
+    #     robot.printMotorSpeeds()
+    #     target.position.printData()
+
     if debug1:
-        robot.printUltraSensors()
-        robot.position.printData()
-        robot.orientation.printData()
-        robot.printMotorSpeeds()
+        robot.position_sim.printData()
+        robot.orientation_sim.printData()
+        goal.printData()
         target.position.printData()
 
     if debug2:
@@ -421,37 +528,26 @@ def goto(goal, px=False):
 
     if debug3:
         print("posDist: ", posDist)
-        print("angDist: ", angDist)
-        print("Rz: ", robot.orientation.rz)
-        print("angError: ", angError)
+        print("angDist: {} ({}°)".format(angDist, rad2deg(angDist)))
+        print("Rz: {} ({}°)".format(robot.orientation.rz, rad2deg(robot.orientation.rz)))
+        print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if abs(angError) > angErrorTolerance and robot.check_around_is_free():
+    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
-            # Try 1
-            print("Status: AngAlignment, Turning Left", flush=True)
-            robot.turnLeft(0.25)
-
-            # Try 2
-            # if not robot.check_obstacle_left():
-            #     print("Status: AngAlignment, Turning Left", flush=True)
-                # robot.turnLeft(0.25)
-            # else:
-            #     print("Status: AngAlignment, CAN'T Turning Left!", flush=True)
-            #     robot.stop()
+            if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
+                print("Status: AngAlignment, Turning Right1", flush=True)
+                robot.turnRight(0.25)
+            else:
+                print("Status: AngAlignment, Turning Left2", flush=True)
+                robot.turnLeft(0.25)
         else:  # Negative
-            # Try 1
-            print("Status: AngAlignment, Turning Right", flush=True)
-            robot.turnRight(0.25)
-
-            # Try 2
-            # if not robot.check_obstacle_right():
-            #     print("Status: AngAlignment, Turning Right", flush=True)
-            #     # robot.turnRight(abs(angError))
-            #     robot.turnRight(0.25)
-            # else:
-            #     print("Status: AngAlignment, CAN'T Turning Right!", flush=True)
-            #     robot.stop()
+            if angDist < deg2rad(90) and robot.orientation.rz > deg2rad(225):  # First Quad
+                print("Status: AngAlignment, Turning Left1", flush=True)
+                robot.turnLeft(0.25)
+            else:
+                print("Status: AngAlignment, Turning Right2", flush=True)
+                robot.turnRight(0.25)
     else:
         # Arrived to Target?
         if posDist > posErrorTolerance:
@@ -465,19 +561,7 @@ def goto(goal, px=False):
                 robot.forward(1.0)
             else:
                 # print("Status: Obstacle Around!")
-                if not robot.check_obstacle_front(0.7):
-                    if abs(angError) > angErrorTolerance:
-                        print("Status: Wrong Direction!", flush=True)
-                        if angError > 0:
-                            print("Status: AngAlignment, Turning Left", flush=True)
-                            robot.turnLeft(0.25)
-                        else:
-                            print("Status: AngAlignment, Turning Right", flush=True)
-                            robot.turnRight(0.25)
-                    else:
-                        print("Status: Obstacle Around! Front is Free, Going Forward", flush=True)
-                        robot.forward(1.0)
-                elif robot.check_obstacle_front(0.7):
+                if robot.check_obstacle_front(0.7):
                     if robot.check_obstacle_left():
                         print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear", flush=True)
                         robot.turnRight(0.5)
@@ -493,12 +577,27 @@ def goto(goal, px=False):
                     elif robot.check_obstacle_front(0.9):  # Too close!
                         print("Status: Avoiding Obstacle, Going Rear", flush=True)
                         robot.rear(1.0)
+                elif robot.check_obstacle_rear(0.5):
+                    print("Status: Avoiding Obstacle, Going Forward", flush=True)
+                    robot.forward(1.0)
                 elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_left(0.95):
                     print("Status: Avoiding Obstacle, Turning Right", flush=True)
                     robot.turnRight(0.5)
                 elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_right(0.95):
                     print("Status: Avoiding Obstacle, Turning Left", flush=True)
                     robot.turnLeft(0.5)
+                elif not robot.check_obstacle_front(0.7):
+                    if abs(angError) > angErrorTolerance:
+                        print("Status: Wrong Direction!", flush=True)
+                        if angError > 0:
+                            print("Status: AngAlignment, Turning Left", flush=True)
+                            robot.turnLeft(0.25)
+                        else:
+                            print("Status: AngAlignment, Turning Right", flush=True)
+                            robot.turnRight(0.25)
+                    else:
+                        print("Status: Obstacle Around! Front is Free, Going Forward", flush=True)
+                        robot.forward(1.0)
                 else:
                     print("Status: Nenhum dos casos", flush=True)
                     robot.stop()
@@ -698,9 +797,7 @@ def Planning(thread_name, robot, target, scene):
                     s_current = s_new
                     s_current_coords_px = stateNameToCoords(s_current)
                     s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
-                    waypoint = [s_current_coords[0], s_current_coords[1], 0.0]
-                    waypoints.append(waypoint)
-                    # scene.setWaypointPosition(waypoint)
+                    waypoints.append(Coord(s_current_coords[0], s_current_coords[1], 0.0))
 
                     print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
 
@@ -718,9 +815,7 @@ def Planning(thread_name, robot, target, scene):
                         s_current = s_new
                         s_current_coords_px = stateNameToCoords(s_current)
                         s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
-                        waypoint = [s_current_coords[0], s_current_coords[1], 0.0]
-                        waypoints.append(waypoint)
-                        # scene.setWaypointPosition(waypoint)
+                        waypoints.append(Coord(s_current_coords[0], s_current_coords[1], 0.0))
 
                         print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
 
@@ -798,7 +893,7 @@ def follow_waypoints(scene):
 
     if len(waypoints) != 0:
         waypoint = waypoints[0]
-        scene.setWaypointPosition(waypoint)
+        scene.setWaypointPosition(waypoint.list())
 
         while goto(waypoint) is False:
             while isPaused:
@@ -821,6 +916,8 @@ def Navigation(thread_name, robot, target, scene):
                     goto_old(robot, target)  # FIXME:
                 elif behavior == 2:
                     braitenberg(robot, 2.0)
+                elif behavior == 3:
+                    goto_temp()
                 else:
                     raise ValueError("Invalid Behavior option!")
             except ValueError:

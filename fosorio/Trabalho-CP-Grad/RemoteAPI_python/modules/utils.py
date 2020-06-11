@@ -20,18 +20,16 @@ def getObjectFromSim(name):
 
 
 def calculateDistances(p1, p2):
-    posDist = math.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2 + (p1.z - p2.z) ** 2)
+    posDist = math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2 + (p2.z - p1.z) ** 2)
     angDist = math.atan2(p2.y - p1.y, p2.x - p1.x)
 
     return posDist, angDist
 
-
-def calculateDistances2(p1, p2):
-    posDist = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2)
-    angDist = math.atan2(p2[1] - p1[1], p2[0] - p1[0])
-
-    return posDist, angDist
-
-
 def stateNameToCoords(name):
     return [int(name.split('x')[1].split('y')[0]), int(name.split('x')[1].split('y')[1])]
+
+def rad2deg(value):
+    return value*(180/math.pi)
+
+def deg2rad(value):
+    return value*(math.pi/180)

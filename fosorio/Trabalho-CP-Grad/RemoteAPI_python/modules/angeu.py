@@ -7,5 +7,5 @@ class Angeu:
         self.ry = ry  # Beta
         self.rz = rz  # Gamma
 
-    def print(self):
-        print(self.x, self.y, self.z)
+    def printData(self):
+        print(self.rx, self.ry, self.rz)

@@ -6,7 +6,8 @@ from vrep import sim
 from modules.utils import getObjectFromSim
 from modules.compass import Compass
 from modules.gps import GPS
-
+from modules.coord import Coord
+from modules.angeu import Angeu
 
 # ======= #
 #  Class  #
@@ -81,8 +82,10 @@ class Pioneer:
         self.usensors = UltraSensors(0.5, 0.2)
         self.position = GPS('robot')
         self.orientation = Compass('robot')
-        # _, self.position2 = sim.simxGetObjectPosition(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
-        # _, self.orientation2 = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
+        _, position_sim = sim.simxGetObjectPosition(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
+        _, orientation_sim = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
+        self.position_sim = Coord(position_sim[0], position_sim[1], position_sim[2])
+        self.orientation_sim = Angeu(orientation_sim[0], orientation_sim[1], orientation_sim[2])
 
         self.usensors.readData()
         self.position.readData()
@@ -90,6 +93,18 @@ class Pioneer:
         self.stop()
 
     # ----- Status ----- #
+    def getSimPosition(self):
+        _, position_sim = sim.simxGetObjectPosition(connection.clientID, self.Handle, -1, sim.simx_opmode_buffer)
+        self.position_sim.x = position_sim[0]
+        self.position_sim.y = position_sim[1]
+        self.position_sim.z = position_sim[2]
+
+    def getSimOrientation(self):
+        _, orientation_sim = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1, sim.simx_opmode_buffer)
+        self.orientation_sim.rx = orientation_sim[0]
+        self.orientation_sim.ry = orientation_sim[1]
+        self.orientation_sim.rz = orientation_sim[2]
+
     def printMotorSpeeds(self):
         print("[{}] vLeft: {:1.4f}\tvRight: {:1.4f}".format('robot', self.leftMotor.speed, self.rightMotor.speed), flush=True)
 

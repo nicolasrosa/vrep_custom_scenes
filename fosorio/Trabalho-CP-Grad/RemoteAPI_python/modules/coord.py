@@ -7,5 +7,8 @@ class Coord:
         self.y = y
         self.z = z
 
-    def print(self):
+    def printData(self):
         print(self.x, self.y, self.z)
+
+    def list(self):
+        return [self.x, self.y, self.z]

@@ -71,8 +71,10 @@ map_grid_resX = scene_size / image_resolution[0]
 map_grid_resY = scene_size / image_resolution[1]
 
 # [goto] Variables Initialization
-posErrorTolerance = 0.3
-angErrorTolerance = 0.3
+# posErrorTolerance = 0.3
+# angErrorTolerance = 0.3
+posErrorTolerance = 0.5
+angErrorTolerance = 0.6
 obstacleDetected = False
 leftDetection = True
 rightDetection = True
@@ -381,36 +383,6 @@ def reative_behavior2():
         else:
             robot.stop()
 
-def reative_behavior3():
-    # print("Status: Obstacle Around!")
-    if not robot.check_obstacle_front():
-        print("Status: PosAlignment, Going Forward", flush=True)
-        robot.forward(1.0)
-    elif robot.check_obstacle_front():  # Too close!
-        if robot.check_obstacle_left():
-            print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear", flush=True)
-            robot.turnRight(0.5)
-            time.sleep(0.05)
-            robot.rear(1.0)
-            time.sleep(0.05)
-        elif robot.check_obstacle_right():
-            print("Status: Avoiding Obstacle on Front-Right, Turning Left-Rear", flush=True)
-            robot.turnLeft(0.5)
-            time.sleep(0.05)
-            robot.rear(1.0)
-            time.sleep(0.05)
-        else:
-            print("Status: Avoiding Obstacle, Going Rear", flush=True)
-            robot.rear(1.0)
-    elif not robot.check_obstacle_front() and robot.check_obstacle_left(0.95):
-        print("Status: Avoiding Obstacle, Turning Right", flush=True)
-        robot.turnRight(0.5)
-    elif not robot.check_obstacle_front() and robot.check_obstacle_right(0.95):
-        print("Status: Avoiding Obstacle, Turning Left", flush=True)
-        robot.turnLeft(0.5)
-    else:
-        print("Status: Nenhum dos casos", flush=True)
-        robot.stop()
 
 def goto(goal, px=False):
     global debug1, debug2, debug3
@@ -487,7 +459,49 @@ def goto(goal, px=False):
             # braitenberg(robot, 1.0)
             # reative_behavior1()
             # reative_behavior2()
-            reative_behavior3()
+
+            if robot.check_around_is_free():
+                print("Status: Free, Straight to Target")
+                robot.forward(1.0)
+            else:
+                # print("Status: Obstacle Around!")
+                if not robot.check_obstacle_front(0.7):
+                    if abs(angError) > angErrorTolerance:
+                        print("Status: Wrong Direction!", flush=True)
+                        if angError > 0:
+                            print("Status: AngAlignment, Turning Left", flush=True)
+                            robot.turnLeft(0.25)
+                        else:
+                            print("Status: AngAlignment, Turning Right", flush=True)
+                            robot.turnRight(0.25)
+                    else:
+                        print("Status: Obstacle Around! Front is Free, Going Forward", flush=True)
+                        robot.forward(1.0)
+                elif robot.check_obstacle_front(0.7):
+                    if robot.check_obstacle_left():
+                        print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear", flush=True)
+                        robot.turnRight(0.5)
+                        time.sleep(0.05)
+                        robot.rear(1.0)
+                        time.sleep(0.05)
+                    elif robot.check_obstacle_right():
+                        print("Status: Avoiding Obstacle on Front-Right, Turning Left-Rear", flush=True)
+                        robot.turnLeft(0.5)
+                        time.sleep(0.05)
+                        robot.rear(1.0)
+                        time.sleep(0.05)
+                    elif robot.check_obstacle_front(0.9):  # Too close!
+                        print("Status: Avoiding Obstacle, Going Rear", flush=True)
+                        robot.rear(1.0)
+                elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_left(0.95):
+                    print("Status: Avoiding Obstacle, Turning Right", flush=True)
+                    robot.turnRight(0.5)
+                elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_right(0.95):
+                    print("Status: Avoiding Obstacle, Turning Left", flush=True)
+                    robot.turnLeft(0.5)
+                else:
+                    print("Status: Nenhum dos casos", flush=True)
+                    robot.stop()
         else:
             robot.stop()
             return True
@@ -759,6 +773,11 @@ def Planning(thread_name, robot, target, scene):
 
         # Go ahead and update the screen with what we've drawn.
         pygame.display.flip()
+
+    # _ = sim.simxSetModelProperty(connection.clientID, robot.Handle, sim.sim_objectspecialproperty_renderable,
+    #                              sim.simx_opmode_oneshot)
+    # _ = sim.simxSetModelProperty(connection.clientID, target.Handle, sim.sim_objectspecialproperty_renderable,
+    #                              sim.simx_opmode_oneshot)
 
     while True:
         for event in pygame.event.get():  # User did something

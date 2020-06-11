@@ -81,6 +81,8 @@ class Pioneer:
         self.usensors = UltraSensors(0.5, 0.2)
         self.position = GPS('robot')
         self.orientation = Compass('robot')
+        # _, self.position2 = sim.simxGetObjectPosition(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
+        # _, self.orientation2 = sim.simxGetObjectOrientation(connection.clientID, self.Handle, -1, sim.simx_opmode_streaming)
 
         self.usensors.readData()
         self.position.readData()

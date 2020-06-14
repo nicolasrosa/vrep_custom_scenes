@@ -495,16 +495,16 @@ def goto(goal, px=False):
     robot.position.readData()
     robot.orientation.readData()
 
-    robot.getSimPosition()
-    robot.getSimOrientation()
+    # robot.getSimPosition()
+    # robot.getSimOrientation()
 
     # Get Target Pose (Only Position)
     target.position.readData()
 
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'
-    # posDist, angDist = calculateDistances(robot.position, goal)
-    posDist, angDist = calculateDistances(robot.position_sim, goal)  # FIXME: Voltar para os dados com ruídos
+    posDist, angDist = calculateDistances(robot.position, goal)
+    # posDist, angDist = calculateDistances(robot.position_sim, goal)
     if angDist < 0:
         angDist += 2 * math.pi
 
@@ -513,18 +513,19 @@ def goto(goal, px=False):
 
     angError = angDist - robot.orientation.rz
 
-    # if debug1:
-    #     robot.printUltraSensors()
-    #     robot.position.printData()
-    #     robot.orientation.printData()
-    #     robot.printMotorSpeeds()
-    #     target.position.printData()
-
     if debug1:
-        robot.position_sim.printData()
-        robot.orientation_sim.printData()
+        robot.printUltraSensors()
+        robot.position.printData()
+        robot.orientation.printData()
+        robot.printMotorSpeeds()
         goal.printData()
         target.position.printData()
+
+    # if debug1:
+    #     robot.position_sim.printData()
+    #     robot.orientation_sim.printData()
+    #     goal.printData()
+    #     target.position.printData()
 
     if debug2:
         print("Front:", robot.check_obstacle_front())

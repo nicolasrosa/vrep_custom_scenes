@@ -540,8 +540,7 @@ def goto(goal, px=False):
         print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if not (
-            angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -597,8 +596,10 @@ def goto(goal, px=False):
                     print("Status: Avoiding Obstacle, Turning Left", flush=True)
                     robot.turnLeft(0.5)
                 elif not robot.check_obstacle_front(0.7):
-                    if abs(angError) > angErrorTolerance:
+                    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance):
                         print("Status: Wrong Direction!", flush=True)
+                        robot.forward(1.0)
+                        time.sleep(0.05)
                         if angError > 0:
                             print("Status: AngAlignment, Turning Left", flush=True)
                             robot.turnLeft(0.25)

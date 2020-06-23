@@ -85,6 +85,8 @@ braitenbergL = [-0.2, -0.4, -0.6, -0.8, -1, -1.2, -1.4, -1.6, 0.0, 0.0, 0.0, 0.0
 braitenbergR = [-1.6, -1.4, -1.2, -1, -0.8, -0.6, -0.4, -0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 # [Pygame] Variables Initialization
+graph = None
+
 if doPlanning:
     # Define some colors
     BLACK = (0, 0, 0)
@@ -458,8 +460,7 @@ def goto_temp():
         print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if not (
-            angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -600,12 +601,20 @@ def goto(goal, px=False):
                         print("Status: Wrong Direction!", flush=True)
                         robot.forward(1.0)
                         time.sleep(0.05)
-                        if angError > 0:
-                            print("Status: AngAlignment, Turning Left", flush=True)
-                            robot.turnLeft(0.25)
-                        else:
-                            print("Status: AngAlignment, Turning Right", flush=True)
-                            robot.turnRight(0.25)
+                        if angError > 0:  # Positive
+                            if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
+                                print("Status: AngAlignment, Turning Right1", flush=True)
+                                robot.turnRight(0.25)
+                            else:
+                                print("Status: AngAlignment, Turning Left2", flush=True)
+                                robot.turnLeft(0.25)
+                        else:  # Negative
+                            if angDist < deg2rad(90) and robot.orientation.rz > deg2rad(225):  # First Quad
+                                print("Status: AngAlignment, Turning Left1", flush=True)
+                                robot.turnLeft(0.25)
+                            else:
+                                print("Status: AngAlignment, Turning Right2", flush=True)
+                                robot.turnRight(0.25)
                     else:
                         print("Status: Obstacle Around! Front is Free, Going Forward", flush=True)
                         robot.forward(1.0)
@@ -679,6 +688,47 @@ def TargetStatus(thread_name, target):
         # Get Target Pose (Only Position)
         target.position.readData()
 
+def update_screen(s_current_coords_px, s_goal_coords_px):
+    global graph
+
+    # Set the screen background
+    screen.fill(BLACK)
+
+    # Draw the grid
+    for row in range(Y_DIM):
+        for column in range(X_DIM):
+            pygame.draw.rect(screen, colors[graph.cells[row][column]],
+                             [GRID_WIDTH_MARGIN * column + MARGIN,
+                              GRID_HEIGHT_MARGIN * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+            node_name = 'x' + str(column) + 'y' + str(row)
+            if graph.graph[node_name].g != float('inf'):
+                text = basicfont.render(str(graph.graph[node_name].g), True, (0, 0, 200))
+                textrect = text.get_rect()
+                textrect.centerx = int(column * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN
+                textrect.centery = int(row * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN
+                screen.blit(text, textrect)
+
+    # Fill in goal cell with RED
+    pygame.draw.rect(screen, RED, [GRID_WIDTH_MARGIN * s_goal_coords_px[0] + MARGIN,
+                                   GRID_HEIGHT_MARGIN * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
+
+    # Draw moving robot, based on pos_coords_px
+    robot_center = [int(s_current_coords_px[0] * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN,
+                    int(s_current_coords_px[1] * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN]
+
+    pygame.draw.circle(screen, GREEN, robot_center, int(GRID_WIDTH))
+
+    # Draw robot viewing range
+    pygame.draw.rect(
+        screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH_MARGIN),
+                       robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT_MARGIN),
+                       2 * VIEWING_RANGE * (GRID_WIDTH_MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT_MARGIN)], 2)
+
+    # Limit to 60 frames per second
+    clock.tick(20)
+
+    # Go ahead and update the screen with what we've drawn.
+    pygame.display.flip()
 
 def Planning(thread_name, robot, target, scene):
     global done
@@ -688,6 +738,7 @@ def Planning(thread_name, robot, target, scene):
     global runThreads
     global isPaused
     global debug1, debug2, debug3
+    global graph
 
     if firstTime:
         # Links Simulation coordinates to Graph Coordinates
@@ -790,6 +841,28 @@ def Planning(thread_name, robot, target, scene):
         # ======== #
         #  Pygame  #
         # ======== #
+        def d_star_step(s_current, k_m):
+            global navigationStart, done
+
+            s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
+
+            if s_new == 'goal':
+                print('Goal Reached!\n')
+                done = True
+                navigationStart = True
+            else:
+                # print('setting s_current to ', s_new)
+                s_current = s_new
+                s_current_coords_px = stateNameToCoords(s_current)
+                s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
+                waypoints.append(Coord(s_current_coords[0], s_current_coords[1], 0.0))
+
+                print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
+
+            # update_screen(s_current_coords_px, s_goal_coords_px)
+
+            return s_current, k_m, s_new
+
         # Event Handler
         for event in pygame.event.get():  # User did something
             if event.type == pygame.QUIT:  # If user clicked close
@@ -797,38 +870,12 @@ def Planning(thread_name, robot, target, scene):
 
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 # print('space bar! call next action')
-                s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
-
-                if s_new == 'goal':
-                    print('Goal Reached!\n')
-                    done = True
-                    navigationStart = True
-                else:
-                    # print('setting s_current to ', s_new)
-                    s_current = s_new
-                    s_current_coords_px = stateNameToCoords(s_current)
-                    s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
-                    waypoints.append(Coord(s_current_coords[0], s_current_coords[1], 0.0))
-
-                    print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
+                s_current, k_m, s_new = d_star_step(s_current, k_m)
 
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 s_new = None
                 while s_new != 'goal':
-                    s_new, k_m = moveAndRescan(graph, queue, s_current, VIEWING_RANGE, k_m)
-
-                    if s_new == 'goal':
-                        print('Goal Reached!\n')
-                        done = True
-                        navigationStart = True
-                    else:
-                        # print('setting s_current to ', s_new)
-                        s_current = s_new
-                        s_current_coords_px = stateNameToCoords(s_current)
-                        s_current_coords = coord_px2world(s_current_coords_px[0], s_current_coords_px[1])
-                        waypoints.append(Coord(s_current_coords[0], s_current_coords[1], 0.0))
-
-                        print("s_current: ", s_current, "\ts_current_coords: ", s_current_coords)
+                    s_current, k_m, s_new = d_star_step(s_current, k_m)
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # User clicks the mouse. Get the position
@@ -841,44 +888,7 @@ def Planning(thread_name, robot, target, scene):
                 if graph.cells[row][column] == 0:
                     graph.cells[row][column] = -1
 
-        # Set the screen background
-        screen.fill(BLACK)
-
-        # Draw the grid
-        for row in range(Y_DIM):
-            for column in range(X_DIM):
-                pygame.draw.rect(screen, colors[graph.cells[row][column]],
-                                 [GRID_WIDTH_MARGIN * column + MARGIN,
-                                  GRID_HEIGHT_MARGIN * row + MARGIN, GRID_WIDTH, GRID_HEIGHT])
-                node_name = 'x' + str(column) + 'y' + str(row)
-                if graph.graph[node_name].g != float('inf'):
-                    text = basicfont.render(str(graph.graph[node_name].g), True, (0, 0, 200))
-                    textrect = text.get_rect()
-                    textrect.centerx = int(column * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN
-                    textrect.centery = int(row * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN
-                    screen.blit(text, textrect)
-
-        # Fill in goal cell with RED
-        pygame.draw.rect(screen, RED, [GRID_WIDTH_MARGIN * s_goal_coords_px[0] + MARGIN,
-                                       GRID_HEIGHT_MARGIN * s_goal_coords_px[1] + MARGIN, GRID_WIDTH, GRID_HEIGHT])
-
-        # Draw moving robot, based on pos_coords_px
-        robot_center = [int(s_current_coords_px[0] * GRID_WIDTH_MARGIN + GRID_WIDTH_by_2) + MARGIN,
-                        int(s_current_coords_px[1] * GRID_HEIGHT_MARGIN + GRID_HEIGHT_by_2) + MARGIN]
-
-        pygame.draw.circle(screen, GREEN, robot_center, int(GRID_WIDTH))
-
-        # Draw robot viewing range
-        pygame.draw.rect(
-            screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH_MARGIN),
-                           robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT_MARGIN),
-                           2 * VIEWING_RANGE * (GRID_WIDTH_MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT_MARGIN)], 2)
-
-        # Limit to 60 frames per second
-        clock.tick(20)
-
-        # Go ahead and update the screen with what we've drawn.
-        pygame.display.flip()
+        update_screen(s_current_coords_px, s_goal_coords_px)
 
     # _ = sim.simxSetModelProperty(connection.clientID, robot.Handle, sim.sim_objectspecialproperty_renderable,
     #                              sim.simx_opmode_oneshot)

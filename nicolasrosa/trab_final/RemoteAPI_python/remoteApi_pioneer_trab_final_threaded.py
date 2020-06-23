@@ -101,7 +101,8 @@ if doPlanning:
         0: WHITE,
         1: GREEN,
         -1: GRAY1,
-        -2: GRAY2
+        -2: GRAY2,
+        -3: GREEN
     }
 
     # This sets the WIDTH and HEIGHT of each grid location
@@ -493,8 +494,8 @@ def goto(goal, px=False):
     robot.usensors.readData()
 
     # Get Robot Pose (Position & Orientation)
-    robot.position.readData()
-    robot.orientation.readData()
+    robot.position.readData(mean=True)
+    robot.orientation.readData(mean=True)
 
     # robot.getSimPosition()
     # robot.getSimOrientation()
@@ -600,7 +601,8 @@ def goto(goal, px=False):
                     if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance):
                         print("Status: Wrong Direction!", flush=True)
                         robot.forward(1.0)
-                        time.sleep(0.05)
+                        # robot.rear(1.0)
+                        time.sleep(0.025)
                         if angError > 0:  # Positive
                             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -890,6 +892,7 @@ def Planning(thread_name, robot, target, scene):
 
         update_screen(s_current_coords_px, s_goal_coords_px)
 
+    # FIXME: Codigo para de funcionar quando ativo as linhas abaixo
     # _ = sim.simxSetModelProperty(connection.clientID, robot.Handle, sim.sim_objectspecialproperty_renderable,
     #                              sim.simx_opmode_oneshot)
     # _ = sim.simxSetModelProperty(connection.clientID, target.Handle, sim.sim_objectspecialproperty_renderable,

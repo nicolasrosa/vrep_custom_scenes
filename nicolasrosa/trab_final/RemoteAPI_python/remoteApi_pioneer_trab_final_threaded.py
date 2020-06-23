@@ -120,8 +120,8 @@ if doPlanning:
     MARGIN = 0  # This sets the margin between each cell
     GRID_WIDTH_MARGIN = GRID_WIDTH + MARGIN
     GRID_HEIGHT_MARGIN = GRID_HEIGHT + MARGIN
-    WINDOW_SIZE = [(GRID_WIDTH_MARGIN) * X_DIM + MARGIN,
-                   (GRID_HEIGHT_MARGIN) * Y_DIM + MARGIN]
+    WINDOW_SIZE = [GRID_WIDTH_MARGIN * X_DIM + MARGIN,
+                   GRID_HEIGHT_MARGIN * Y_DIM + MARGIN]
 
     GRID_WIDTH_by_2 = GRID_WIDTH / 2
     GRID_HEIGHT_by_2 = GRID_HEIGHT / 2
@@ -329,7 +329,8 @@ def goto_temp():
         print("angError: {} ({}°)".format(angError, rad2deg(angError)))
 
     # AngAlignment or GoForward?
-    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
+    if not (
+            angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance) and robot.check_around_is_free():
         if angError > 0:  # Positive
             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
                 print("Status: AngAlignment, Turning Right1", flush=True)
@@ -534,10 +535,6 @@ def coord_world2px(x, y):
     return u, v
 
 
-def print_img_info(img):
-    print(img.dtype, np.min(img), np.max(img))
-
-
 # ========= #
 #  Threads  #
 # ========= #
@@ -557,6 +554,7 @@ def TargetStatus(thread_name, target):
     while sim.simxGetConnectionId(connection.clientID) != -1:  # sysCall_sensing()
         # Get Target Pose (Only Position)
         target.position.readData()
+
 
 def update_screen(s_current_coords_px, s_goal_coords_px):
     global graph
@@ -590,15 +588,16 @@ def update_screen(s_current_coords_px, s_goal_coords_px):
 
     # Draw robot viewing range
     pygame.draw.rect(
-        screen, BLUE, [robot_center[0] - VIEWING_RANGE * (GRID_WIDTH_MARGIN),
-                       robot_center[1] - VIEWING_RANGE * (GRID_HEIGHT_MARGIN),
-                       2 * VIEWING_RANGE * (GRID_WIDTH_MARGIN), 2 * VIEWING_RANGE * (GRID_HEIGHT_MARGIN)], 2)
+        screen, BLUE, [robot_center[0] - VIEWING_RANGE * GRID_WIDTH_MARGIN,
+                       robot_center[1] - VIEWING_RANGE * GRID_HEIGHT_MARGIN,
+                       2 * VIEWING_RANGE * GRID_WIDTH_MARGIN, 2 * VIEWING_RANGE * GRID_HEIGHT_MARGIN], 2)
 
     # Limit to 60 frames per second
     clock.tick(20)
 
     # Go ahead and update the screen with what we've drawn.
     pygame.display.flip()
+
 
 def Planning(thread_name, robot, target, scene):
     global done

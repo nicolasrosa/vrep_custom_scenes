@@ -7,6 +7,7 @@ from vrep import sim
 serverIP = '127.0.0.1'
 serverPort = 19999
 timeOut = 5000
+clientID = None
 
 
 def init():

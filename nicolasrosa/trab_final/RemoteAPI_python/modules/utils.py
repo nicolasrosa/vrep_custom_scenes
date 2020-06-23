@@ -1,9 +1,16 @@
 # =========== #
 #  Libraries  #
 # =========== #
-from vrep import sim
-from modules import connection
 import math
+
+import numpy as np
+
+from modules import connection
+from vrep import sim
+
+
+def print_img_info(img):
+    print(img.dtype, np.min(img), np.max(img))
 
 
 def print_status_bar(message):

@@ -9,25 +9,26 @@
 # IMPORTANT: for each successful call to simxStart, there
 # should be a corresponding call to simxFinish at the end!
 
+import math
 # =========== #
 #  Libraries  #
 # =========== #
 import time
 from threading import Thread
-from modules.scene import Scene
-from modules.utils import *
-from modules import connection
 
-from skimage.morphology import dilation, square
 import numpy as np
 import pygame
+from skimage.morphology import dilation, square
+
 from d_star_lite.d_star_lite import initDStarLite, moveAndRescan
 from d_star_lite.grid import GridWorld
-from modules.utils import stateNameToCoords
-from modules.pioneer import Pioneer
-from modules.target import Target
-import matplotlib.pyplot as plt
+from modules import connection
 from modules.coord import Coord
+from modules.pioneer import Pioneer
+from modules.scene import Scene
+from modules.target import Target
+from modules.utils import stateNameToCoords, calculateDistances, rad2deg, deg2rad
+from vrep import sim
 
 # =============== #
 #  Global Params  #
@@ -265,139 +266,6 @@ def goto_old(robot, target):
                     print("Status: Nenhum dos casos!")
                     robot.forward(0.1)
                     robot.stop()
-        else:
-            robot.stop()
-
-
-def reative_behavior1():
-    global leftDetection
-    global rightDetection
-    global obstacleDetected
-
-    if robot.check_around_is_free():
-        print("Status: Free, Straight to Target")
-        # leftDetection = True
-        # rightDetection = True
-        robot.forward(1.0)
-    else:
-        # GoForward or Follow Wall?
-        print("Status: Obstacle Around!")
-
-        print("Front:", robot.check_obstacle_front())
-        print("Left: ", robot.check_obstacle_left())
-        print("Right: ", robot.check_obstacle_right())
-        print("Rear: ", robot.check_obstacle_rear())
-        print("leftDetection: ", leftDetection)
-        print("rightDetection: ", rightDetection)
-        if robot.check_obstacle_front() and robot.check_obstacle_left() and leftDetection:
-            print("Status: Obstacle on Front&Left, Turning Right")
-
-            if not obstacleDetected:
-                time.sleep(5)
-                savedRz = robot.orientation.rz
-                obstacleDetected = True
-                leftDetection = False
-
-            robot.turnRight(0.5)
-        elif robot.check_obstacle_front() and robot.check_obstacle_right() and rightDetection:
-            print("Status: Obstacle on Front&Right, Turning Left")
-
-            if not obstacleDetected:
-                time.sleep(5)
-                savedRz = robot.orientation.rz
-                obstacleDetected = True
-                rightDetection = False
-
-            robot.turnLeft(0.5)
-        elif not robot.check_obstacle_front() and (
-                robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
-            if abs(robot.usensors.detect[1 - 1] - robot.usensors.detect[16 - 1]) > 0.1 or abs(
-                    robot.usensors.detect[8 - 1] - robot.usensors.detect[9 - 1]) > 0.1:
-                turningSpeed = 0.1
-                if robot.usensors.detect[1 - 1] > robot.usensors.detect[16 - 1]:
-                    print("Status: Aligning with Wall on Left, Turning Right")
-                    robot.turnRight(turningSpeed)
-                elif robot.usensors.detect[1 - 1] < robot.usensors.detect[16 - 1]:
-                    print("Status: Aligning with Wall on Left, Turning Left")
-                    robot.turnLeft(turningSpeed)
-                elif robot.usensors.detect[8 - 1] > robot.usensors.detect[9 - 1]:
-                    print("Status: Aligning with Wall on Right, Turning Left")
-                    robot.turnLeft(turningSpeed)
-                elif robot.usensors.detect[8 - 1] < robot.usensors.detect[9 - 1]:
-                    print("Status: Aligning with Wall on Right, Turning Right")
-                    robot.turnRight(turningSpeed)
-
-            else:
-                print("Status: Following Wall, Straight")
-                robot.forward(0.5)
-
-        elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
-            robot.rear(0.5)
-
-        elif robot.check_obstacle_front() and \
-                not robot.check_obstacle_left() and \
-                not robot.check_obstacle_right():
-            robot.turnLeft(0.5)
-        else:
-            print("Status: Nenhum dos casos!")
-            robot.forward(0.1)
-            robot.stop()
-
-
-def reative_behavior2():
-    if robot.check_around_is_free():
-        print("Status: Free, Straight to Target")
-        # leftDetection = True
-        # rightDetection = True
-        robot.forward(1.0)
-    else:
-        # GoForward or Follow Wall?
-        print("Status: Obstacle Around!")
-
-        print("Front:", robot.check_obstacle_front())
-        print("Left: ", robot.check_obstacle_left())
-        print("Right: ", robot.check_obstacle_right())
-        print("Rear: ", robot.check_obstacle_rear())
-        # print("leftDetection: ", leftDetection)
-        # print("rightDetection: ", rightDetection)
-        if robot.check_obstacle_front() and robot.check_obstacle_left():
-            print("Status: Obstacle on Front&Left, Turning Right")
-            robot.turnRight(0.5)
-
-        elif robot.check_obstacle_front() and robot.check_obstacle_right():
-            print("Status: Obstacle on Front&Right, Turning Left")
-            robot.turnLeft(0.5)
-
-        elif not robot.check_obstacle_front() and (
-                robot.check_obstacle_left() or robot.check_obstacle_right()):  # Follow Wall
-            if abs(robot.usensors.detect[1 - 1] - robot.usensors.detect[16 - 1]) > 0.1 or abs(
-                    robot.usensors.detect[8 - 1] - robot.usensors.detect[9 - 1]) > 0.1:
-                turningSpeed = 0.1
-                if robot.usensors.detect[1 - 1] > robot.usensors.detect[16 - 1]:
-                    print("Status: Aligning with Wall on Left, Turning Right")
-                    robot.turnRight(turningSpeed)
-                elif robot.usensors.detect[1 - 1] < robot.usensors.detect[16 - 1]:
-                    print("Status: Aligning with Wall on Left, Turning Left")
-                    robot.turnLeft(turningSpeed)
-                elif robot.usensors.detect[8 - 1] > robot.usensors.detect[9 - 1]:
-                    print("Status: Aligning with Wall on Right, Turning Left")
-                    robot.turnLeft(turningSpeed)
-                elif robot.usensors.detect[8 - 1] < robot.usensors.detect[9 - 1]:
-                    print("Status: Aligning with Wall on Right, Turning Right")
-                    robot.turnRight(turningSpeed)
-
-            else:
-                print("Status: Following Wall, Straight")
-                robot.forward(0.5)
-
-        elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
-            robot.rear(0.5)
-            time.sleep(1)
-
-        elif robot.check_obstacle_front() and \
-                not robot.check_obstacle_left() and \
-                not robot.check_obstacle_right():
-            robot.turnLeft(0.5)
         else:
             robot.stop()
 
@@ -876,8 +744,21 @@ def Planning(thread_name, robot, target, scene):
 
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
                 s_new = None
+                # s_second_last = None
+                # count, count2 = 0, 0
                 while s_new != 'goal':
                     s_current, k_m, s_new = d_star_step(s_current, k_m)
+
+                    # if count%2 == 0:
+                    #     s_second_last = s_current
+                    #
+                    #     if s_second_last == s_current:
+                    #         print('Houston, we have a problem!!!')
+                    #         s_current_coords_px = stateNameToCoords(s_current)
+                    #
+                    #         graph.cells[s_current_coords_px[1]][s_current_coords_px[0]] = -1
+                    #
+                    # count += 1
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 # User clicks the mouse. Get the position

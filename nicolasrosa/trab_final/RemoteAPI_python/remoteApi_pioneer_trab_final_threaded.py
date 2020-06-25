@@ -370,7 +370,7 @@ def goto(goal, px=False):
     # robot.getSimOrientation()
 
     # Get Target Pose (Only Position)
-    target.position.readData()
+    target.position.readData(mean=True)
 
     # ----- Actuators ----- #
     # Compute Position/Angle Distance from 'Robot' to 'Target'

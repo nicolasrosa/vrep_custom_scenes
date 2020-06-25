@@ -457,6 +457,9 @@ def goto(goal, px=False):
                         robot.turnLeft(1.0)
                         time.sleep(0.05)
                         robot.rear(1.0)
+                    else:
+                        print("Status: Avoiding Obstacle on Diagonal, Going Forward (Slow)", flush=True)
+                        robot.forward(0.25)
                 elif robot.check_obstacle_rear(0.5):
                     print("Status: Avoiding Obstacle, Going Forward", flush=True)
                     robot.forward(1.0)
@@ -619,7 +622,6 @@ def Planning(thread_name, robot, target, scene):
 
         s_start = 'x{}y{}'.format(int(robot_pos_x_px), int(robot_pos_y_px))
         s_start_coords_px = stateNameToCoords(s_start)
-        scene.setWaypointPosition([robot.position.x, robot.position.y, 0.0])
 
         s_goal = 'x{}y{}'.format(int(target_pos_x_px), int(target_pos_y_px))
         s_goal_coords_px = stateNameToCoords(s_goal)

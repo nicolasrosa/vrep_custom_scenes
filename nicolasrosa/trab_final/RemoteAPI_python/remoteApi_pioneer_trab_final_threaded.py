@@ -74,7 +74,7 @@ map_grid_resY = scene_size / image_resolution[1]
 # [goto] Variables Initialization
 # posErrorTolerance = 0.3
 # angErrorTolerance = 0.3
-posErrorTolerance = 0.4
+posErrorTolerance = 0.45
 angErrorTolerance = 0.6
 obstacleDetected = False
 leftDetection = True
@@ -254,7 +254,7 @@ def goto_old(robot, target):
                         print("Status: Following Wall, Straight")
                         robot.forward(0.5)
 
-                elif robot.usensors.detect[4 - 1] >= 0.8 or robot.usensors.detect[5 - 1] >= 0.8:  # Too Close
+                elif robot.usensors.detect[4 - 1] >= 0.9 or robot.usensors.detect[5 - 1] >= 0.9:  # Too Close
                     robot.rear(0.5)
 
                 elif robot.check_obstacle_front() and \
@@ -439,7 +439,7 @@ def goto(goal, px=False):
                 robot.forward(1.0)
             else:
                 # print("Status: Obstacle Around!")
-                if robot.check_obstacle_front(0.7):
+                if robot.check_obstacle_front(0.5):
                     if robot.check_obstacle_left():
                         print("Status: Avoiding Obstacle on Front-Left, Turning Right-Rear", flush=True)
                         robot.turnRight(0.5)
@@ -463,35 +463,54 @@ def goto(goal, px=False):
                 elif robot.check_obstacle_rear(0.5):
                     print("Status: Avoiding Obstacle, Going Forward", flush=True)
                     robot.forward(1.0)
-                elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_left(0.95):
+                elif not robot.check_obstacle_front(0.8) and robot.check_obstacle_left(0.95):
                     print("Status: Avoiding Obstacle, Turning Right", flush=True)
                     robot.turnRight(0.5)
-                elif not robot.check_obstacle_front(0.7) and robot.check_obstacle_right(0.95):
+                elif not robot.check_obstacle_front(0.8) and robot.check_obstacle_right(0.95):
                     print("Status: Avoiding Obstacle, Turning Left", flush=True)
                     robot.turnLeft(0.5)
-                elif not robot.check_obstacle_front(0.7):
-                    if not (angDist - angErrorTolerance < robot.orientation.rz < angDist + angErrorTolerance):
+                elif not robot.check_obstacle_front(0.1):
+                    if not (angDist - angErrorTolerance*2 < robot.orientation.rz < angDist + angErrorTolerance*2):
                         print("Status: Wrong Direction!", flush=True)
                         robot.forward(1.0)
-                        # robot.rear(1.0)
                         time.sleep(0.025)
                         if angError > 0:  # Positive
                             if angDist > deg2rad(270) and robot.orientation.rz < deg2rad(225):  # Fourth Quad
-                                print("Status: AngAlignment, Turning Right1", flush=True)
-                                robot.turnRight(0.25)
+                                if not robot.check_obstacle_right():
+                                    print("Status: AngAlignment, Turning Right1", flush=True)
+                                    robot.turnRight(0.25)
+                                else:
+                                    print("Status: AngAlignment, Can't Turn Right, Turning Left1", flush=True)
+                                    robot.turnLeft(0.25)
                             else:
-                                print("Status: AngAlignment, Turning Left2", flush=True)
-                                robot.turnLeft(0.25)
+                                if not robot.check_obstacle_left():
+                                    print("Status: AngAlignment, Turning Left2", flush=True)
+                                    robot.turnLeft(0.25)
+                                else:
+                                    print("Status: AngAlignment, Can't Turn Left, Turning Right2", flush=True)
+                                    robot.turnRight(0.25)
                         else:  # Negative
                             if angDist < deg2rad(90) and robot.orientation.rz > deg2rad(225):  # First Quad
-                                print("Status: AngAlignment, Turning Left1", flush=True)
-                                robot.turnLeft(0.25)
+                                if not robot.check_obstacle_left():
+                                    print("Status: AngAlignment, Turning Left1", flush=True)
+                                    robot.turnLeft(0.25)
+                                else:
+                                    print("Status: AngAlignment, Can't Turn Left, Turning Right1", flush=True)
+                                    robot.turnRight(0.25)
                             else:
-                                print("Status: AngAlignment, Turning Right2", flush=True)
-                                robot.turnRight(0.25)
+                                if not robot.check_obstacle_right():
+                                    print("Status: AngAlignment, Turning Right2", flush=True)
+                                    robot.turnRight(0.25)
+                                else:
+                                    print("Status: AngAlignment, Can't Turn Right, Turning Left2", flush=True)
+                                    robot.turnLeft(0.25)
                     else:
                         print("Status: Obstacle Around! Front is Free, Going Forward", flush=True)
                         robot.forward(1.0)
+                elif robot.check_obstacle_front(0.1) and robot.check_obstacle_left(0.3):
+                        robot.turnRight(0.25)
+                elif robot.check_obstacle_front(0.1) and robot.check_obstacle_right(0.3):
+                        robot.turnLeft(0.25)
                 else:
                     print("Status: Nenhum dos casos", flush=True)
                     robot.stop()
@@ -662,7 +681,7 @@ def Planning(thread_name, robot, target, scene):
             image_grid = np.flip(image_grid, axis=0)  # Flip Vertically
 
             image_grid = (image_grid + 256).astype(np.uint8)  # (resX, resY, 1), data: [0, 255]
-            image_grid = dilation(image_grid, square(5))
+            image_grid = dilation(image_grid, square(7))
             # image_grid = closing(image_grid, square(3))
 
             # Remove Robot and Target from Map Grid

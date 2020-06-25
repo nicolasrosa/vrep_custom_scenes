@@ -36,8 +36,14 @@ def calculateDistances(p1, p2):
 
 
 def stateNameToCoords(name):
-    return [int(name.split('x')[1].split('y')[0]), int(name.split('x')[1].split('y')[1])]
+    global runThreads
 
+    try:
+        return [int(name.split('x')[1].split('y')[0]), int(name.split('x')[1].split('y')[1])]
+    except AttributeError:
+        print("Can't run 'Planning' because, current robot location is to close to an obstacle.")
+        runThreads = False
+        raise SystemError
 
 def rad2deg(value):
     return value * (180 / math.pi)
